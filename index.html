@@ -217,6 +217,7 @@
       .recent-ic { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; }
       .recent-ic svg { width: 15px; height: 15px; }
       .recent-ic.opened { background: var(--quote); color: var(--primary); }
+      .recent-ic.added { background: #ecfdf5; color: var(--green); }
       .recent-ic.blocked { background: #fffbeb; color: var(--amber); }
       .recent-ic.notfound { background: #fef2f2; color: #dc2626; }
       .recent-ic.info { background: var(--n100); color: var(--n600); }
@@ -367,6 +368,19 @@
         return String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
       }
 
+      // A looser normalize that keeps dots and hyphens — used when adding a
+      // bookmark by voice so a spoken address ("salesforce.com") survives
+      // intact instead of being flattened into "salesforce com".
+      function normalizeLoose(s) {
+        return String(s || '').toLowerCase().replace(/[^a-z0-9\s.\-]/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+
+      // Title-case spoken words for a friendly bookmark name: "bank of
+      // america" -> "Bank Of America", "salesforce" -> "Salesforce".
+      function titleCase(s) {
+        return String(s || '').replace(/\b[a-z]/g, c => c.toUpperCase());
+      }
+
       // Prepend https:// when the user typed a bare host.
       function ensureScheme(url) {
         const u = String(url || '').trim();
@@ -482,13 +496,70 @@
        * Command parsing — turn a spoken phrase into an intent
        * ================================================================ */
       const ACTION_VERBS = /\b(open up|open|launch|go to|goto|pull up|bring up|navigate to|take me to|show me|load up|load|start up|start|fire up|jump to|switch to|switch over to|visit|head to|head over to|get me|bring me to|take me over to)\b/;
+      // Verbs that mean "save a new bookmark". Longest phrases first so
+      // "add a bookmark for X" doesn't get clipped to a bare "add" + junk.
+      // Bare "favorite/favourite" is left out on purpose — it's usually an
+      // adjective ("open my favorite site"), so it must not trigger an add.
+      const ADD_VERBS = /\b(create a bookmark for|add a bookmark for|save a bookmark for|new bookmark for|add a bookmark|new bookmark|add to (my )?(bookmarks|favorites|favourites)|bookmark|add|save|remember)\b/;
       const STOP_RE = /\b(stop listening|stop the assistant|stop bookmarks buddy|quit listening|turn (it |yourself )?off|go to sleep|that's all|stop now)\b/;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
+
+      // Common TLDs people speak — used to glue a trailing "<name> com" back
+      // into a real domain when the recognizer dropped the dot.
+      const SPOKEN_TLDS = ['com', 'org', 'net'];
+
+      // Strip polite filler and "bookmark"-ish words from a spoken add phrase
+      // while PRESERVING dots/hyphens so a dictated URL stays a URL.
+      function cleanAddQuery(q) {
+        q = ' ' + q + ' ';
+        q = q
+          .replace(/\b(please|for me|right now|now|real quick|hey|ok|okay|bookmarks? buddy|can you|could you|would you|will you|i want to|i need to|i would like to|i'd like to|let's|lets)\b/g, ' ')
+          .replace(/\b(to (my )?(bookmarks|book marks|favorites|favourites|favorite|favourite|faves))\b/g, ' ')
+          .replace(/\b(as (a )?(bookmark|favorite|favourite))\b/g, ' ')
+          .replace(/\b(a (new )?bookmark for|bookmark for)\b/g, ' ')
+          .replace(/\b(the website|website|web ?site|the web ?page|the site|the page)\b/g, ' ')
+          .replace(/\b(my|the|a|an)\b/g, ' ')
+          .replace(/\s+/g, ' ').trim();
+        return q;
+      }
+
+      // Turn a spoken "company name or URL" into { url, name }. A phrase that
+      // looks like an address keeps its URL and gets a name from the host; a
+      // bare company name gets a ".com" guess and a title-cased name.
+      function interpretAddTarget(phrase) {
+        let t = String(phrase || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!t) return null;
+        t = t.replace(/\s*\bdot\b\s*/g, '.');                                  // "sales dot com" -> "sales.com"
+        t = t.replace(new RegExp('\\s+(' + SPOKEN_TLDS.join('|') + ')$'), '.$1'); // "sales com" -> "sales.com"
+        t = t.replace(/\.+/g, '.').replace(/^[.\s]+|[.\s]+$/g, '').trim();      // tidy stray dots
+
+        if (t.includes('.')) {
+          const url = t.replace(/\s+/g, '');           // a dictated address has no spaces
+          if (looksLikeUrl(url)) {
+            const core = hostCore(url) || url;
+            return { url, name: titleCase(core) };
+          }
+        }
+        // Bare company name -> guess a .com and title-case the spoken words.
+        const slug = t.replace(/[^a-z0-9]+/g, '');
+        if (!slug) return null;
+        return { url: slug + '.com', name: titleCase(t) };
+      }
 
       function parseCommand(raw) {
         const t = ' ' + normalize(raw) + ' ';
         if (STOP_RE.test(t)) return { kind: 'stop' };
         if (HELP_RE.test(t)) return { kind: 'help' };
+
+        // "add <company or url>" — save a new bookmark hands-free. Parsed off a
+        // dot-preserving string so a spoken address survives, and checked
+        // before the open verbs since "add"/"bookmark" are unambiguous.
+        const loose = ' ' + normalizeLoose(raw) + ' ';
+        const addM = loose.match(ADD_VERBS);
+        if (addM) {
+          const rawQuery = cleanAddQuery(loose.slice(addM.index + addM[0].length));
+          return { kind: 'add', query: normalize(rawQuery), rawQuery };
+        }
 
         const m = t.match(ACTION_VERBS);
         let query, explicit;
@@ -518,16 +589,19 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark name, e.g. ' + exampleNames()[0]
-            : 'Add a bookmark first, then say “open” and its name.' });
-          announce('Say open and a bookmark name.');
+            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Or “add” a company to save it.'
+            : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
+          announce('Say open and a bookmark name, or add and a company name.');
           renderSoft(); return;
         }
 
         if (!cmd.query) {
           if (cmd.kind === 'open') showToast('Say “open” and a bookmark name', 'mic');
+          else if (cmd.kind === 'add') showToast('Say a company to add, e.g. “add Notion”', 'mic');
           return;
         }
+
+        if (cmd.kind === 'add') { addBookmarkByVoice(cmd.rawQuery); return; }
 
         if (cmd.kind === 'maybe') {
           // No action verb was heard. To keep all-day listening from flinging
@@ -593,6 +667,41 @@
         try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); } catch {}
         recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) });
         render();
+      }
+
+      // Add a bookmark from a spoken company name or URL. The user supplies
+      // just one half — we infer the other: a bare name gets a ".com" guess,
+      // a dictated address gets a friendly name from its host. Re-saying a
+      // site already on the list is a no-op (with a gentle nudge).
+      function addBookmarkByVoice(rawQuery) {
+        const target = interpretAddTarget(rawQuery);
+        if (!target || !target.url || !looksLikeUrl(target.url)) {
+          showToast('Say a company name to add, e.g. “add Notion”', 'mic');
+          announce('Tell me a company name or web address to add.');
+          return;
+        }
+
+        const host = hostOf(target.url);
+        const existing = host && STATE.bookmarks.find(b => hostOf(b.url) === host);
+        if (existing) {
+          highlightMatch(existing.id);
+          const label = existing.name || hostCore(existing.url);
+          recordAction({ type: 'info', text: '“' + label + '” is already saved' });
+          showToast('“' + label + '” is already in your bookmarks', 'info');
+          announce(label + ' is already saved.');
+          renderSoft();
+          return;
+        }
+
+        const bm = { id: uid(), name: target.name, url: target.url };
+        STATE.bookmarks.push(bm);
+        persistBookmarks();
+        highlightMatch(bm.id);
+        recordAction({ type: 'added', name: bm.name, url: ensureScheme(bm.url) });
+        showToast('Added “' + bm.name + '” to your bookmarks', 'bookmark-plus');
+        announce('Added ' + bm.name + ' to your bookmarks.');
+        if (STATE.settings.speak) speak('Added ' + bm.name);
+        renderSoft();
       }
 
       function highlightMatch(id) {
@@ -755,7 +864,7 @@
         VOICE.listenOn = true;
         VOICE.permissionDenied = false;
         startRecognition();
-        showToast('Listening — say “open” and a bookmark name', 'mic');
+        showToast('Listening — say “open” or “add” and a name', 'mic');
         announce('Listening for commands.');
         render();
       }
@@ -813,7 +922,7 @@
         return true;
       }
       function transcriptResting(isFocus) {
-        if (VOICE.listenOn) return 'Listening… say “open” and a bookmark name';
+        if (VOICE.listenOn) return 'Listening… say “open” or “add” and a name';
         return isFocus ? 'Tap the circle to start listening' : 'Press the mic to start';
       }
 
@@ -1081,7 +1190,7 @@
               <div class="panel-head-ic cyan"><i data-lucide="audio-lines"></i></div>
               <div class="panel-titles">
                 <div class="panel-title">Voice assistant</div>
-                <div class="panel-sub">Turn it on, then just say what to open. It keeps listening while you work.</div>
+                <div class="panel-sub">Turn it on, then say what to open — or “add” a company to save it. It keeps listening while you work.</div>
               </div>
             </div>
             <div class="vp-body">
@@ -1102,6 +1211,7 @@
 
               <div class="vp-examples">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
+                <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
 
               ${sr ? `<div class="vp-shortcut">${shortcutHint()}</div>` : ''}
@@ -1149,9 +1259,10 @@
       }
 
       function renderRecentItem(a) {
-        const icon = a.type === 'opened' ? 'external-link' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
+        const icon = a.type === 'opened' ? 'external-link' : a.type === 'added' ? 'bookmark-plus' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
         let main;
         if (a.type === 'opened') main = 'Opened ' + escHtml(a.name);
+        else if (a.type === 'added') main = 'Added ' + escHtml(a.name);
         else if (a.type === 'blocked') main = 'Tap to open ' + escHtml(a.name);
         else if (a.type === 'notfound') main = 'No match for “' + escHtml(a.query) + '”';
         else main = escHtml(a.text || '');
@@ -1181,7 +1292,7 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name, or “add” a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
               <div class="focus-recent">${renderRecent(true)}</div>
@@ -1293,7 +1404,7 @@
           // Already on — reaffirm rather than toggle off, so the shortcut always
           // leaves Bookmarks Buddy listening. Stop by clicking the mic or saying
           // “stop listening”.
-          showToast('Already listening — say “open” and a bookmark name', 'mic');
+          showToast('Already listening — say “open” or “add” and a name', 'mic');
           announce('Already listening.');
           return;
         }
