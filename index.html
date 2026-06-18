@@ -191,6 +191,10 @@
       .vp-chip { font-size: 12px; font-weight: 600; color: var(--n600); background: var(--n50); border: 1px solid var(--n200); border-radius: 999px; padding: 6px 13px; }
       .vp-chip b { color: var(--primary); font-weight: 700; }
 
+      /* Keyboard-shortcut hint (Ctrl+Alt+B launches listening) */
+      .vp-shortcut { margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--n500); line-height: 1.95; }
+      kbd { display: inline-block; font-family: inherit; font-size: 11px; font-weight: 700; line-height: 1; color: var(--navy-deep); background: #fff; border: 1px solid var(--n300); border-bottom-width: 2px; border-radius: 6px; padding: 3px 6px; vertical-align: baseline; }
+
       .vp-options { margin-top: 20px; width: 100%; padding-top: 16px; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 10px; }
       .opt-row { display: flex; align-items: center; gap: 12px; text-align: left; }
       .opt-row .opt-text { flex: 1; min-width: 0; }
@@ -887,6 +891,12 @@
         return names.length ? names : ['“Open Salesforce”', '“Open Outreach”', '“Open Gmail”'];
       }
 
+      // The global launch shortcut, rendered as <kbd> keys. Kept in one place
+      // so the voice panel and focus screen always show the same combo.
+      function shortcutHint() {
+        return 'Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> to start listening';
+      }
+
       function captureFocus() {
         const el = document.activeElement;
         if (el && el.id && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'))
@@ -959,7 +969,7 @@
               </button>
             </nav>
             <div class="topbar-spacer"></div>
-            <button class="mic-pill ${pillCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening' : 'Click to start listening'}">
+            <button class="mic-pill ${pillCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening' : 'Click to start listening (Ctrl+Alt+B)'}">
               <span class="dot"></span>
               <i data-lucide="${pillIcon}"></i>
               ${escHtml(pillLabel)}
@@ -1078,7 +1088,7 @@
               ${VOICE.pendingOpen ? renderPending() : ''}
               <div class="orb-wrap ${on ? 'live' : ''}">
                 <span class="orb-ring"></span><span class="orb-ring d"></span>
-                <button class="voice-orb ${orbCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop' : 'Click to start listening'}" aria-label="${on ? 'Stop listening' : 'Start listening'}">
+                <button class="voice-orb ${orbCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop' : 'Click to start listening (Ctrl+Alt+B)'}" aria-label="${on ? 'Stop listening' : 'Start listening'}">
                   <i data-lucide="${icon}"></i>
                 </button>
               </div>
@@ -1093,6 +1103,8 @@
               <div class="vp-examples">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
               </div>
+
+              ${sr ? `<div class="vp-shortcut">${shortcutHint()}</div>` : ''}
 
               <div class="vp-options">
                 <div class="opt-row">
@@ -1170,6 +1182,7 @@
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
               <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
               <div class="focus-recent">${renderRecent(true)}</div>
             </div>
@@ -1256,6 +1269,36 @@
       }
 
       window.addEventListener('beforeunload', () => { persistBookmarks(); persistSettings(); });
+
+      /* ================================================================
+       * Global shortcut — Ctrl + Alt + B launches voice activation
+       * Starts hands-free listening from anywhere (any screen, even with
+       * focus in a text field) without reaching for the mouse. A keydown is
+       * a user gesture, so the microphone prompt is allowed exactly as it is
+       * from the on-screen button. Registered once so it survives re-renders.
+       * ================================================================ */
+      function matchesListenShortcut(e) {
+        // Match the physical "B" key so non-QWERTY layouts still work, with a
+        // key-value fallback. Require Ctrl+Alt; reject Meta so we never swallow
+        // an OS/browser combo (e.g. ⌘ shortcuts on macOS).
+        const isB = e.code === 'KeyB' || (typeof e.key === 'string' && e.key.toLowerCase() === 'b');
+        return isB && e.ctrlKey && e.altKey && !e.metaKey;
+      }
+      window.addEventListener('keydown', (e) => {
+        if (!matchesListenShortcut(e)) return;
+        e.preventDefault();
+        if (e.repeat) return; // ignore auto-repeat while the keys are held down
+        if (!VOICE.srSupported) { showToast('Voice needs Chrome or Edge', 'mic-off'); return; }
+        if (VOICE.listenOn) {
+          // Already on — reaffirm rather than toggle off, so the shortcut always
+          // leaves Bookmarks Buddy listening. Stop by clicking the mic or saying
+          // “stop listening”.
+          showToast('Already listening — say “open” and a bookmark name', 'mic');
+          announce('Already listening.');
+          return;
+        }
+        startListening();
+      });
 
       // Some browsers populate speechSynthesis voices asynchronously.
       if (VOICE.ttsSupported) { try { window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = () => {}; } catch {} }
