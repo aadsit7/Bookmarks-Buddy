@@ -884,17 +884,19 @@
         SHEET.snapshot = Object.create(null);
         for (const bm of STATE.bookmarks) SHEET.snapshot[bm.id] = JSON.stringify(toSheetRow(bm));
       }
-      // Mirror a recorded user action to the sheet's activity feed.
+      // Mirror a recorded user action to the sheet's Activity Log. Keys match
+      // that tab's column headers exactly; Timestamp is left to the script,
+      // which stamps a real Date when the field is omitted.
       function queueActivity(a) {
         if (!sheetEnabled() || !a) return;
         enqueue({
           action: 'logActivity',
           entry: {
-            'Type': a.type || '',
+            'Action': a.type || '',
             'Name': a.name || '',
             'URL': a.url || '',
-            'Detail': a.text || a.query || '',
-            'Timestamp': new Date().toISOString()
+            'What You Said': a.query || '',
+            'Message': a.text || ''
           }
         });
       }
