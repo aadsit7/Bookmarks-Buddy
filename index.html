@@ -480,6 +480,7 @@
         watchdogId: null,
         recentActions: [],         // { type, name, url, query, at }
         pendingOpen: null,         // a bookmark a popup-block kept us from opening
+        pendingGroup: null,        // { label, bms:[] } a folder a popup-block kept us from opening
         popupHintShown: false,
         lastMatchedId: null,
         matchClearId: null,
@@ -752,6 +753,46 @@
         return best;
       }
 
+      // Every folder across all springboard pages, flattened for matching.
+      function allFolders() {
+        const out = [];
+        for (const page of STATE.layout.pages)
+          for (const it of page) if (it.type === 'folder') out.push(it);
+        return out;
+      }
+
+      // Score a spoken query against a folder's name (0..1). The literal word
+      // "folder"/"group" is dropped first so "open my work folder" scores on
+      // "work". Mirrors scoreBookmark's name handling (exact / containment /
+      // per-word fuzzy) so folders feel as forgiving as single bookmarks.
+      function scoreFolder(query, folder) {
+        const q = normalize(query).replace(/\b(folder|group)\b/g, ' ').replace(/\s+/g, ' ').trim();
+        const name = normalize(folder.name);
+        if (!q || !name) return 0;
+        if (name === q) return 1;
+        let best = simRatio(q, name);
+        if (name.includes(q) || q.includes(name)) {
+          const ratio = Math.min(q.length, name.length) / Math.max(q.length, name.length);
+          best = Math.max(best, 0.78 + 0.2 * ratio);
+        }
+        const qTokens = q.split(' ').filter(Boolean);
+        const nameWords = name.split(' ').filter(Boolean);
+        if (qTokens.length && qTokens.every(w => name.includes(w))) best = Math.max(best, 0.9);
+        for (const w of qTokens)
+          for (const nw of nameWords)
+            if (w.length >= 3 && nw.length >= 3) best = Math.max(best, 0.7 * simRatio(w, nw));
+        return best;
+      }
+
+      function matchFolder(query, threshold) {
+        let best = null;
+        for (const f of allFolders()) {
+          const score = scoreFolder(query, f);
+          if (score >= threshold && (!best || score > best.score)) best = { folder: f, score };
+        }
+        return best;
+      }
+
       /* ================================================================
        * Command parsing — turn a spoken phrase into an intent
        * ================================================================ */
@@ -866,17 +907,30 @@
         if (cmd.kind === 'maybe') {
           // No action verb was heard. To keep all-day listening from flinging
           // tabs open on ordinary conversation, only a bare utterance that IS
-          // a bookmark name (or its site name) opens without a verb.
+          // a bookmark name (or its site name) — or exactly a folder name —
+          // opens without a verb.
           const exact = STATE.bookmarks.find(b =>
             normalize(b.name) === cmd.query || normalize(hostCore(b.url)) === cmd.query);
-          if (exact) openBookmark(exact, { viaVoice: true, query: cmd.query });
+          if (exact) { openBookmark(exact, { viaVoice: true, query: cmd.query }); return; }
+          const exactFolder = allFolders().find(f => normalize(f.name) === cmd.query);
+          if (exactFolder) openFolder(exactFolder, { viaVoice: true, query: cmd.query });
           return;
         }
 
         // Explicit "open X" is forgiving — fuzzy-match through typos/mishears.
-        const match = matchBookmark(cmd.query, 0.42);
-        if (match) {
-          openBookmark(match.bm, { viaVoice: true, query: cmd.query });
+        // X may name a single bookmark OR a folder (which opens every site in
+        // it). Saying "folder"/"group" forces the folder reading; otherwise a
+        // single bookmark wins ties and a folder only wins when it scores
+        // strictly higher.
+        const wantsFolder = /\b(folder|group)\b/.test(cmd.query);
+        const folderMatch = matchFolder(cmd.query, wantsFolder ? 0.34 : 0.52);
+        const bmMatch = matchBookmark(cmd.query, 0.42);
+        if (folderMatch && wantsFolder) {
+          openFolder(folderMatch.folder, { viaVoice: true, query: cmd.query });
+        } else if (bmMatch && (!folderMatch || bmMatch.score >= folderMatch.score)) {
+          openBookmark(bmMatch.bm, { viaVoice: true, query: cmd.query });
+        } else if (folderMatch) {
+          openFolder(folderMatch.folder, { viaVoice: true, query: cmd.query });
         } else {
           recordAction({ type: 'notfound', query: cmd.query });
           showToast(`No bookmark matches “${cmd.query}”`, 'search-x');
@@ -926,6 +980,63 @@
         // This runs inside a real click, so the pop-up is allowed.
         try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); } catch {}
         recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) });
+        render();
+      }
+
+      // Open every site in a folder at once — the "group" open. Voice-triggered
+      // window.open() has no fresh user gesture, so the browser commonly blocks
+      // all but (at most) the first; whatever it blocks is staged behind a
+      // one-tap "Open" banner, and the first time we nudge the user to allow
+      // pop-ups so future folder opens are fully hands-free.
+      function openFolder(folder, { viaVoice = false, query = '' } = {}) {
+        if (!folder) return;
+        const bms = folder.items
+          .map(a => STATE.bookmarks.find(b => b.id === a.id))
+          .filter(bm => bm && ensureScheme(bm.url));
+        if (!bms.length) {
+          showToast('“' + folder.name + '” has no sites yet', 'triangle-alert');
+          announce(folder.name + ' folder is empty.');
+          return;
+        }
+
+        let opened = 0;
+        const blocked = [];
+        for (const bm of bms) {
+          let win = null;
+          try { win = window.open(ensureScheme(bm.url), '_blank', 'noopener'); } catch { win = null; }
+          if (win) { opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); }
+          else blocked.push(bm);
+        }
+
+        if (opened && !viaVoice) { render(); return; }
+
+        if (blocked.length) {
+          VOICE.pendingGroup = { label: folder.name || 'folder', bms: blocked };
+          announce(blocked.length + ' sites from ' + folder.name + ' are ready to open — tap to confirm');
+          if (!VOICE.popupHintShown) {
+            VOICE.popupHintShown = true;
+            showToast('Allow pop-ups for this site to open folders hands-free', 'mouse-pointer-click');
+          } else {
+            showToast('Tap to open ' + blocked.length + ' site' + (blocked.length > 1 ? 's' : '') + ' from “' + folder.name + '”', 'mouse-pointer-click');
+          }
+        } else {
+          showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' in “' + folder.name + '”', 'external-link');
+          announce('Opening ' + opened + ' sites in ' + folder.name);
+          if (STATE.settings.speak && viaVoice) speak('Opening ' + folder.name);
+        }
+        renderSoft();
+      }
+
+      function openPendingGroup() {
+        const g = VOICE.pendingGroup;
+        if (!g) return;
+        VOICE.pendingGroup = null;
+        // Runs inside a real click, so the whole batch of pop-ups is allowed.
+        let opened = 0;
+        for (const bm of g.bms) {
+          try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); } catch {}
+        }
+        if (opened) showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' from “' + g.label + '”', 'external-link');
         render();
       }
 
@@ -1266,7 +1377,7 @@
       // The global launch shortcut, rendered as <kbd> keys. Kept in one place
       // so the voice panel and focus screen always show the same combo.
       function shortcutHint() {
-        return 'Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> to start listening';
+        return 'Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> to start or stop listening';
       }
 
       function captureFocus() {
@@ -1342,7 +1453,7 @@
               </button>
             </nav>
             <div class="topbar-spacer"></div>
-            <button class="mic-pill ${pillCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening' : 'Click to start listening (Ctrl+Alt+B)'}">
+            <button class="mic-pill ${pillCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (Ctrl+Alt+B)' : 'Click to start listening (Ctrl+Alt+B)'}">
               <span class="dot"></span>
               <i data-lucide="${pillIcon}"></i>
               ${escHtml(pillLabel)}
@@ -1355,6 +1466,7 @@
         return `
           <div class="home home-springboard">
             ${VOICE.pendingOpen ? renderPending() : ''}
+            ${VOICE.pendingGroup ? renderPendingGroup() : ''}
             ${renderSpringboard()}
           </div>`;
       }
@@ -1552,6 +1664,22 @@
           </div>`;
       }
 
+      function renderPendingGroup() {
+        const g = VOICE.pendingGroup;
+        if (!g) return '';
+        const n = g.bms.length;
+        return `
+          <div class="pending" style="width:100%">
+            <div class="pending-ic"><i data-lucide="mouse-pointer-click"></i></div>
+            <div class="pending-body">
+              <div class="pending-title">Ready to open ${n} site${n > 1 ? 's' : ''} from ${escHtml(g.label)}</div>
+              <div class="pending-sub">Your browser blocked the pop-ups. Tap to open them all, or allow pop-ups for this site to open folders hands-free.</div>
+            </div>
+            <button class="btn-primary" data-action="open-pending-group"><i data-lucide="external-link"></i> Open ${n}</button>
+            <button class="pending-x" data-action="dismiss-pending-group" title="Dismiss"><i data-lucide="x"></i></button>
+          </div>`;
+      }
+
       function renderRecent(isFocus) {
         const items = VOICE.recentActions;
         return `
@@ -1592,6 +1720,7 @@
           <div class="focus">
             <div class="focus-inner">
               ${VOICE.pendingOpen ? `<div style="width:100%;max-width:480px;margin-bottom:18px">${renderPending()}</div>` : ''}
+              ${VOICE.pendingGroup ? `<div style="width:100%;max-width:480px;margin-bottom:18px">${renderPendingGroup()}</div>` : ''}
               <div class="orb-wrap ${on ? 'live' : ''}">
                 <span class="orb-ring"></span><span class="orb-ring d"></span>
                 <button class="voice-orb ${on ? 'on' : 'off'}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} aria-label="${on ? 'Stop listening' : 'Start listening'}">
@@ -1599,11 +1728,12 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name, or “add” a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
               <div class="vp-examples" style="justify-content:center">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
+                ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
                 <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
               <div class="focus-options">
@@ -1664,6 +1794,8 @@
             case 'delete-bookmark': deleteBookmark(id); break;
             case 'open-pending': openPending(); break;
             case 'dismiss-pending': VOICE.pendingOpen = null; render(); break;
+            case 'open-pending-group': openPendingGroup(); break;
+            case 'dismiss-pending-group': VOICE.pendingGroup = null; render(); break;
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
@@ -1889,11 +2021,13 @@
       window.addEventListener('beforeunload', () => { persistBookmarks(); persistSettings(); });
 
       /* ================================================================
-       * Global shortcut — Ctrl + Alt + B launches voice activation
-       * Starts hands-free listening from anywhere (any screen, even with
-       * focus in a text field) without reaching for the mouse. A keydown is
-       * a user gesture, so the microphone prompt is allowed exactly as it is
-       * from the on-screen button. Registered once so it survives re-renders.
+       * Global shortcut — Ctrl + Alt + B toggles voice listening
+       * Starts OR stops hands-free listening from anywhere (any screen, even
+       * with focus in a text field) without reaching for the mouse, so the
+       * user can flip listening on and off between screens with one combo. A
+       * keydown is a user gesture, so the microphone prompt is allowed exactly
+       * as it is from the on-screen button. Registered once so it survives
+       * re-renders.
        * ================================================================ */
       function matchesListenShortcut(e) {
         // Match the physical "B" key so non-QWERTY layouts still work, with a
@@ -1907,15 +2041,10 @@
         e.preventDefault();
         if (e.repeat) return; // ignore auto-repeat while the keys are held down
         if (!VOICE.srSupported) { showToast('Voice needs Chrome or Edge', 'mic-off'); return; }
-        if (VOICE.listenOn) {
-          // Already on — reaffirm rather than toggle off, so the shortcut always
-          // leaves Bookmarks Buddy listening. Stop by clicking the mic or saying
-          // “stop listening”.
-          showToast('Already listening — say “open” or “add” and a name', 'mic');
-          announce('Already listening.');
-          return;
-        }
-        startListening();
+        // Toggle: the same combo turns listening on when off and off when on,
+        // so the user can switch it between screens without the mouse.
+        if (VOICE.listenOn) stopListening();
+        else startListening();
       });
 
       // Some browsers populate speechSynthesis voices asynchronously.
