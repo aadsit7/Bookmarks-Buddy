@@ -901,6 +901,65 @@
         return best;
       }
 
+      // Resolve one spoken name to a single target: a folder (which fans out to
+      // every site inside it) or one bookmark. Saying "folder"/"group" forces
+      // the folder reading; otherwise a bookmark wins ties and a folder only
+      // wins when it scores strictly higher. Returns a tagged object with the
+      // winning score, or null when nothing clears the bar.
+      function resolveTarget(query) {
+        const q = normalize(query);
+        if (!q) return null;
+        const wantsFolder = /\b(folder|group)\b/.test(q);
+        const folderMatch = matchFolder(q, wantsFolder ? 0.34 : 0.52);
+        const bmMatch = matchBookmark(q, 0.42);
+        if (wantsFolder && folderMatch) return { kind: 'folder', folder: folderMatch.folder, score: folderMatch.score };
+        if (bmMatch && (!folderMatch || bmMatch.score >= folderMatch.score))
+          return { kind: 'bookmark', bm: bmMatch.bm, score: bmMatch.score };
+        if (folderMatch) return { kind: 'folder', folder: folderMatch.folder, score: folderMatch.score };
+        return null;
+      }
+
+      // Resolve a phrase that may name several groups at once — "open games and
+      // searches", "open games in searches". The whole phrase is tried as a
+      // single target first so a real name that contains a joiner ("News and
+      // Sports") stays intact; only when that isn't a confident match do we
+      // split on the joiners and resolve each part. Returns a list of targets.
+      function resolveTargets(query) {
+        const whole = resolveTarget(query);
+        const parts = query.split(MULTI_JOIN_RE).map(s => s.trim()).filter(Boolean);
+        if (parts.length >= 2 && (!whole || whole.score < 0.9)) {
+          const each = parts.map(resolveTarget).filter(Boolean);
+          if (each.length >= 2) return each;
+        }
+        return whole ? [whole] : [];
+      }
+
+      // Expand a resolved target to the bookmarks it should open — one for a
+      // bookmark target, the whole group for a folder target.
+      function targetBookmarks(target) {
+        if (!target) return [];
+        if (target.kind === 'bookmark') return target.bm ? [target.bm] : [];
+        return target.folder.items
+          .map(a => STATE.bookmarks.find(b => b.id === a.id))
+          .filter(bm => bm && ensureScheme(bm.url));
+      }
+
+      // Flatten a list of targets into a de-duplicated bookmark list plus a
+      // human label, so several folders/bookmarks open as one batch.
+      function collectTargets(targets) {
+        const seen = new Set();
+        const bms = [];
+        for (const t of targets) {
+          for (const bm of targetBookmarks(t)) {
+            if (!seen.has(bm.id)) { seen.add(bm.id); bms.push(bm); }
+          }
+        }
+        const label = targets
+          .map(t => t.kind === 'folder' ? t.folder.name : (t.bm.name || hostCore(t.bm.url)))
+          .join(' & ');
+        return { bms, label };
+      }
+
       /* ================================================================
        * Command parsing — turn a spoken phrase into an intent
        * ================================================================ */
@@ -924,6 +983,12 @@
       const SPLIT_LOOSE_RE = /\bsplit\b/;
       // Conjunctions that separate the two sites in a split request.
       const SPLIT_JOIN_RE = /\b(?:and|with|plus|versus|vs|alongside|next to|together with|beside)\b/;
+      // Conjunctions that separate several targets in one open/split request —
+      // "open games and searches", "open games in searches", "Notion, Gmail".
+      // Broader than SPLIT_JOIN_RE (it also accepts commas, "&", and a bare
+      // "in") because an open command lists groups rather than pitting two
+      // sites against each other.
+      const MULTI_JOIN_RE = /\s*(?:,|&|\b(?:and|with|plus|also|then|in|alongside|together with|beside)\b)\s*/;
 
       // Common TLDs people speak — used to glue a trailing "<name> com" back
       // into a real domain when the recognizer dropped the dot.
@@ -1011,7 +1076,10 @@
           .replace(/\b(in|on|into|my|the|a|an|to|up|new|tab|tabs|window|view|screen|both|together|side)\b/g, ' ')
           .replace(/\s+/g, ' ').trim();
 
-        const queries = q.split(SPLIT_JOIN_RE).map(s => s.trim()).filter(Boolean).slice(0, 2);
+        // Split on any of the multi-target joiners so a split request can name
+        // more than two groups ("split games, searches and youtube"); each
+        // name may itself be a folder that fans out to several sites.
+        const queries = q.split(MULTI_JOIN_RE).map(s => s.trim()).filter(Boolean).slice(0, 6);
 
         // A bare "split" with no explicit "split view"/"side by side" only
         // counts as a real request when two names were actually joined —
@@ -1085,9 +1153,9 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Say “split view” and two names to put them side by side. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
+            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
             : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
-          announce('Say open and a bookmark name, split view and two names, close and a name to shut a tab, or add and a company name.');
+          announce('Say open and one or more bookmarks or folders, split view and two names to tile them, close and a name to shut a tab, or add and a company name.');
           renderSoft(); return;
         }
 
@@ -1117,24 +1185,23 @@
         }
 
         // Explicit "open X" is forgiving — fuzzy-match through typos/mishears.
-        // X may name a single bookmark OR a folder (which opens every site in
-        // it). Saying "folder"/"group" forces the folder reading; otherwise a
-        // single bookmark wins ties and a folder only wins when it scores
-        // strictly higher.
-        const wantsFolder = /\b(folder|group)\b/.test(cmd.query);
-        const folderMatch = matchFolder(cmd.query, wantsFolder ? 0.34 : 0.52);
-        const bmMatch = matchBookmark(cmd.query, 0.42);
-        if (folderMatch && wantsFolder) {
-          openFolder(folderMatch.folder, { viaVoice: true, query: cmd.query });
-        } else if (bmMatch && (!folderMatch || bmMatch.score >= folderMatch.score)) {
-          openBookmark(bmMatch.bm, { viaVoice: true, query: cmd.query });
-        } else if (folderMatch) {
-          openFolder(folderMatch.folder, { viaVoice: true, query: cmd.query });
-        } else {
+        // X may name a single bookmark, a folder (which opens every site in
+        // it), OR several of either joined by "and"/"in"/commas ("open games
+        // and searches"), which opens every site across all of them at once.
+        const targets = resolveTargets(cmd.query);
+        if (!targets.length) {
           recordAction({ type: 'notfound', query: cmd.query });
           showToast(`No bookmark matches “${cmd.query}”`, 'search-x');
           announce('No bookmark found for ' + cmd.query);
           renderSoft();
+          return;
+        }
+        if (targets.length === 1 && targets[0].kind === 'bookmark') {
+          openBookmark(targets[0].bm, { viaVoice: true, query: cmd.query });
+        } else if (targets.length === 1 && targets[0].kind === 'folder') {
+          openFolder(targets[0].folder, { viaVoice: true, query: cmd.query });
+        } else {
+          openTargets(targets, { viaVoice: true });
         }
       }
 
@@ -1207,21 +1274,21 @@
         render();
       }
 
-      // Open every site in a folder at once — the "group" open. Voice-triggered
-      // window.open() has no fresh user gesture, so the browser commonly blocks
-      // all but (at most) the first; whatever it blocks is staged behind a
-      // one-tap "Open" banner, and the first time we nudge the user to allow
-      // pop-ups so future folder opens are fully hands-free.
-      function openFolder(folder, { viaVoice = false, query = '' } = {}) {
-        if (!folder) return;
-        const bms = folder.items
-          .map(a => STATE.bookmarks.find(b => b.id === a.id))
-          .filter(bm => bm && ensureScheme(bm.url));
+      // Open a batch of bookmarks at once — the shared "group" open behind both
+      // a single folder and a multi-target ("open games and searches") command.
+      // Voice-triggered window.open() has no fresh user gesture, so the browser
+      // commonly blocks all but (at most) the first; whatever it blocks is
+      // staged behind a one-tap "Open" banner, and the first time we nudge the
+      // user to allow pop-ups so future group opens are fully hands-free.
+      function openGroup(bms, label, { viaVoice = false } = {}) {
+        bms = (bms || []).filter(bm => bm && ensureScheme(bm.url));
         if (!bms.length) {
-          showToast('“' + folder.name + '” has no sites yet', 'triangle-alert');
-          announce(folder.name + ' folder is empty.');
+          showToast('“' + label + '” has no sites yet', 'triangle-alert');
+          announce(label + ' is empty.');
           return;
         }
+
+        highlightMatch(bms[0].id);
 
         let opened = 0;
         const blocked = [];
@@ -1234,20 +1301,33 @@
         if (opened && !viaVoice) { render(); return; }
 
         if (blocked.length) {
-          VOICE.pendingGroup = { label: folder.name || 'folder', bms: blocked };
-          announce(blocked.length + ' sites from ' + folder.name + ' are ready to open — tap to confirm');
+          VOICE.pendingGroup = { label: label || 'folder', bms: blocked };
+          announce(blocked.length + ' sites from ' + label + ' are ready to open — tap to confirm');
           if (!VOICE.popupHintShown) {
             VOICE.popupHintShown = true;
             showToast('Allow pop-ups for this site to open folders hands-free', 'mouse-pointer-click');
           } else {
-            showToast('Tap to open ' + blocked.length + ' site' + (blocked.length > 1 ? 's' : '') + ' from “' + folder.name + '”', 'mouse-pointer-click');
+            showToast('Tap to open ' + blocked.length + ' site' + (blocked.length > 1 ? 's' : '') + ' from “' + label + '”', 'mouse-pointer-click');
           }
         } else {
-          showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' in “' + folder.name + '”', 'external-link');
-          announce('Opening ' + opened + ' sites in ' + folder.name);
-          if (STATE.settings.speak && viaVoice) speak('Opening ' + folder.name);
+          showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' in “' + label + '”', 'external-link');
+          announce('Opening ' + opened + ' sites in ' + label);
+          if (STATE.settings.speak && viaVoice) speak('Opening ' + label);
         }
         renderSoft();
+      }
+
+      // Open every site in a single folder at once.
+      function openFolder(folder, { viaVoice = false, query = '' } = {}) {
+        if (!folder) return;
+        openGroup(targetBookmarks({ kind: 'folder', folder }), folder.name || 'folder', { viaVoice });
+      }
+
+      // Open every site across several resolved targets (folders and/or
+      // bookmarks) as one de-duplicated batch — "open games and searches".
+      function openTargets(targets, { viaVoice = false } = {}) {
+        const { bms, label } = collectTargets(targets);
+        openGroup(bms, label, { viaVoice });
       }
 
       function openPendingGroup() {
@@ -1265,10 +1345,11 @@
 
       /* ---------------- split view ---------------- */
 
-      // Resolve one or two spoken names to bookmarks and open them side by
-      // side. Each name is fuzzy-matched like a normal "open"; a repeat of the
-      // same bookmark is de-duped so "split Gmail and Gmail" can't open one
-      // page twice.
+      // Resolve the spoken names to bookmarks and open them side by side. Each
+      // name is matched like a normal "open", so it may be a single bookmark OR
+      // a folder — a folder fans out to every site inside it, so "split games
+      // and searches" tiles all four sites across the two folders. Repeats are
+      // de-duped so the same page can't open twice.
       function handleSplit(queries) {
         if (!queries || !queries.length) {
           showToast('Say two bookmarks, e.g. “split view Notion and Gmail”', 'mic');
@@ -1277,11 +1358,13 @@
         }
 
         const found = [];
+        const seen = new Set();
         const misses = [];
         for (const q of queries) {
-          const m = matchBookmark(q, 0.42);
-          if (m && !found.includes(m.bm)) found.push(m.bm);
-          else if (!m) misses.push(q);
+          const t = resolveTarget(q);
+          const bms = targetBookmarks(t);
+          if (!bms.length) { misses.push(q); continue; }
+          for (const bm of bms) if (!seen.has(bm.id)) { seen.add(bm.id); found.push(bm); }
         }
 
         if (!found.length) {
@@ -1295,29 +1378,40 @@
 
         openSplitView(found, { viaVoice: true });
 
-        // One half matched, the other didn't — open what we have and say so.
-        if (misses.length && found.length < 2) {
-          showToast('Opened “' + (found[0].name || hostCore(found[0].url)) + '” — couldn’t find “' + misses[0] + '”', 'search-x');
+        // Some names matched, others didn't — open what we have and say so.
+        if (misses.length) {
+          showToast('Couldn’t find “' + misses[0] + '”', 'search-x');
         }
       }
 
-      // Window features that place a pop-up on the left or right half of the
-      // screen, simulating the browser's split view from a plain web page. A
-      // single page takes the left half so there's room to add a second.
+      // Window features that tile pop-ups across the screen, simulating the
+      // browser's split view from a plain web page. One page takes the left
+      // half (leaving room to add a second by hand); two sit side by side; more
+      // fan out into the squarest grid that fits them all.
       // NB: 'noopener'/'noreferrer' are deliberately NOT in the feature string
       // — with either set, window.open() returns null even on success, which
       // would defeat the open-vs-blocked detection below. We sever the opener
       // link manually after the window is handed back instead.
-      function splitFeatures(count) {
+      function tileFeatures(count) {
         const scr = window.screen || {};
         const sw = scr.availWidth || scr.width || window.innerWidth || 1280;
         const sh = scr.availHeight || scr.height || window.innerHeight || 800;
         const sx = scr.availLeft || 0;
         const sy = scr.availTop || 0;
-        const half = Math.floor(sw / 2);
-        const left = 'left=' + sx + ',top=' + sy + ',width=' + half + ',height=' + sh;
-        const right = 'left=' + (sx + half) + ',top=' + sy + ',width=' + (sw - half) + ',height=' + sh;
-        return count >= 2 ? [left, right] : [left];
+        if (count <= 1) {
+          const half = Math.floor(sw / 2);
+          return ['left=' + sx + ',top=' + sy + ',width=' + half + ',height=' + sh];
+        }
+        const cols = count <= 2 ? count : Math.ceil(Math.sqrt(count));
+        const rows = Math.ceil(count / cols);
+        const cw = Math.floor(sw / cols);
+        const ch = Math.floor(sh / rows);
+        const feats = [];
+        for (let i = 0; i < count; i++) {
+          const c = i % cols, r = Math.floor(i / cols);
+          feats.push('left=' + (sx + c * cw) + ',top=' + (sy + r * ch) + ',width=' + cw + ',height=' + ch);
+        }
+        return feats;
       }
 
       // Open one positioned window and sever its opener link. Returns the
@@ -1334,11 +1428,11 @@
       // user gesture, so the browser may block it; anything blocked is staged
       // behind a one-tap "Open" banner (with its half-screen placement kept).
       function openSplitView(bms, { viaVoice = false } = {}) {
-        const valid = bms.filter(bm => bm && ensureScheme(bm.url)).slice(0, 2);
+        const valid = bms.filter(bm => bm && ensureScheme(bm.url)).slice(0, 6);
         if (!valid.length) { showToast('Those bookmarks have no address', 'triangle-alert'); return; }
 
         highlightMatch(valid[0].id);
-        const feats = splitFeatures(valid.length);
+        const feats = tileFeatures(valid.length);
         const plan = valid.map((bm, i) => ({ bm, feat: feats[i] }));
         const label = valid.map(b => b.name || hostCore(b.url)).join(' & ');
 
@@ -2328,7 +2422,7 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “split view” and two names to put them side by side. Say “close” and a name (or “close this”) to shut a tab you opened. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “close” and a name (or “close this”) to shut a tab you opened. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
