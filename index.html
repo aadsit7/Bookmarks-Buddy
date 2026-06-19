@@ -550,6 +550,59 @@
       const LS_BOOKMARKS = 'bookmarksBuddy.bookmarks.v1';
       const LS_SETTINGS  = 'bookmarksBuddy.settings.v1';
       const LS_LAYOUT    = 'bookmarksBuddy.layout.v1';
+      const LS_OUTBOX    = 'bookmarksBuddy.outbox.v1';   // queued sheet writes awaiting sync
+      const LS_TOKEN     = 'bookmarksBuddy.appToken';    // optional on-device app_token override
+      const LS_SYNCED    = 'bookmarksBuddy.synced.v1';   // set once this device has merged with the sheet
+
+      /* ================================================================
+       * Google Sheet backend
+       * Bookmarks now live in a Google Sheet, reached through a deployed
+       * Apps Script web app. localStorage stays on as an offline mirror:
+       * the UI always loads instantly from it, every change is written to
+       * it, and any change made while the sheet is unreachable is queued
+       * and flushed once it's reachable again. With no app_token set the
+       * sheet layer stays dormant and the app behaves exactly as the
+       * localStorage-only app it has always been.
+       * ================================================================ */
+      // Paste your Apps Script app_token between the quotes to embed it.
+      // It can also be supplied without editing this file — append
+      // ?token=… to the URL once, or run bbSetToken('…') in the console.
+      const EMBEDDED_APP_TOKEN = '';
+
+      const SHEET = {
+        url: 'https://script.google.com/macros/s/AKfycbwXvgj1niSwrREBepEA9oO_YNBtgyq1vSdZPNclYBqMz0ytTI1r1sjUDxePExx5B0mOlA/exec',
+        token: resolveAppToken(),
+        online: true,                   // last known reachability of the sheet
+        snapshot: Object.create(null),  // Bookmark ID -> JSON of the row the sheet last had
+        flushing: false                 // guards against overlapping outbox flushes
+      };
+      function sheetEnabled() { return !!(SHEET.url && SHEET.token); }
+
+      // Resolve the token without baking the secret into the page: a
+      // ?token=… (or #token=…) URL param wins and is remembered on the
+      // device, then a previously saved value, then the embedded constant.
+      function resolveAppToken() {
+        try {
+          const here = new URL(location.href);
+          const q = here.searchParams.get('token') ||
+            new URLSearchParams((location.hash || '').replace(/^#/, '')).get('token');
+          if (q) { try { localStorage.setItem(LS_TOKEN, q); } catch {} return q; }
+        } catch {}
+        try { const saved = localStorage.getItem(LS_TOKEN); if (saved) return saved; } catch {}
+        return EMBEDDED_APP_TOKEN;
+      }
+      // Set or clear the token at runtime (persists on this device), then
+      // kick a sync so a freshly-configured app pulls the sheet right away.
+      window.bbSetToken = function (t) {
+        SHEET.token = String(t || '').trim();
+        try {
+          if (SHEET.token) localStorage.setItem(LS_TOKEN, SHEET.token);
+          else localStorage.removeItem(LS_TOKEN);
+        } catch {}
+        if (sheetEnabled())
+          (async () => { try { await flushOutbox(); } catch {} await syncFromSheet(); })();
+        return SHEET.token ? 'app_token set — syncing with your sheet' : 'app_token cleared';
+      };
 
       // A short, recognizable starter set so a brand-new user can fill their
       // home screen in one tap each instead of facing an empty grid.
@@ -626,9 +679,7 @@
       function loadData() {
         try {
           const b = JSON.parse(localStorage.getItem(LS_BOOKMARKS) || '[]');
-          if (Array.isArray(b)) STATE.bookmarks = b.filter(x => x && x.url).map(x => ({
-            id: x.id || uid(), name: String(x.name || '').trim(), url: String(x.url || '').trim()
-          }));
+          if (Array.isArray(b)) STATE.bookmarks = b.filter(x => x && x.url).map(normalizeBookmark);
         } catch {}
         try {
           const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || '{}');
@@ -637,14 +688,20 @@
       }
       function persistBookmarks() {
         try {
-          localStorage.setItem(LS_BOOKMARKS, JSON.stringify(STATE.bookmarks));
+          persistBookmarksLocal();
           // Keep the springboard layout in step with the bookmark list (new
           // ones get placed, deleted ones get pruned) and save it too.
           syncLayout();
           persistLayout();
+          // Mirror the change up to the Google Sheet (queued; a no-op when no
+          // app_token is set). Never let a sync hiccup fail the local save.
+          try { syncSheet(); } catch {}
           return true;
         }
         catch { return false; }
+      }
+      function persistBookmarksLocal() {
+        localStorage.setItem(LS_BOOKMARKS, JSON.stringify(STATE.bookmarks));
       }
       function persistSettings() {
         try { localStorage.setItem(LS_SETTINGS, JSON.stringify(STATE.settings)); } catch {}
@@ -657,6 +714,234 @@
       }
       function persistLayout() {
         try { localStorage.setItem(LS_LAYOUT, JSON.stringify(STATE.layout)); } catch {}
+      }
+
+      /* ================================================================
+       * Google Sheet sync — mappers, network, and an offline write queue
+       * ================================================================ */
+
+      // localStorage object -> internal bookmark, preserving the metadata
+      // columns so they survive a round-trip even though only id/name/url
+      // drive the UI.
+      function normalizeBookmark(x) {
+        x = x || {};
+        return {
+          id: x.id || uid(),
+          name: String(x.name || '').trim(),
+          url: String(x.url || '').trim(),
+          folder: x.folder ?? '', page: x.page ?? '', position: x.position ?? '',
+          owner: x.owner ?? '', dateAdded: x.dateAdded ?? '',
+          lastOpened: x.lastOpened ?? '', timesOpened: x.timesOpened ?? '', notes: x.notes ?? ''
+        };
+      }
+
+      // Sheet row -> internal bookmark, using the exact column names as keys.
+      function fromSheetRow(row) {
+        row = row || {};
+        const str = v => (v == null ? '' : String(v));
+        return {
+          id: str(row['Bookmark ID']).trim() || uid(),
+          name: str(row['Name']).trim(),
+          url: str(row['URL']).trim(),
+          folder: row['Folder'] ?? '',
+          page: row['Page'] ?? '',
+          position: row['Position'] ?? '',
+          owner: row['Owner (Profile ID)'] ?? '',
+          dateAdded: row['Date Added'] ?? '',
+          lastOpened: row['Last Opened'] ?? '',
+          timesOpened: row['Times Opened'] ?? '',
+          notes: row['Notes'] ?? ''
+        };
+      }
+
+      // Internal bookmark -> Sheet row, using the exact column names. A new
+      // bookmark gets a Date Added stamp (written back so it stays stable);
+      // metadata the app doesn't manage is passed through untouched.
+      function toSheetRow(bm) {
+        if (!bm.dateAdded) bm.dateAdded = new Date().toISOString();
+        return {
+          'Bookmark ID': bm.id,
+          'Name': bm.name || '',
+          'URL': bm.url || '',
+          'Folder': bm.folder ?? '',
+          'Page': bm.page ?? '',
+          'Position': bm.position ?? '',
+          'Owner (Profile ID)': bm.owner ?? '',
+          'Date Added': bm.dateAdded,
+          'Last Opened': bm.lastOpened ?? '',
+          'Times Opened': bm.timesOpened ?? '',
+          'Notes': bm.notes ?? ''
+        };
+      }
+
+      /* ---- network ---- */
+      // POST as text/plain;charset=utf-8 so the browser keeps it a "simple"
+      // request and skips the CORS preflight that Apps Script can't answer.
+      // The body is still JSON text; the token is injected here so it never
+      // has to sit in the persisted queue.
+      async function sheetPost(payload) {
+        const res = await fetch(SHEET.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(Object.assign({ token: SHEET.token }, payload))
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        let data = {};
+        try { data = await res.json(); } catch {}
+        if (data && data.ok === false) throw new Error(data.error || 'sheet rejected the write');
+        return data;
+      }
+      // GET the full list. token rides as a query param per the web app's API.
+      async function apiGetBookmarks() {
+        const u = new URL(SHEET.url);
+        u.searchParams.set('action', 'getBookmarks');
+        u.searchParams.set('token', SHEET.token);
+        const res = await fetch(u.toString(), { method: 'GET' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data || !data.ok || !Array.isArray(data.bookmarks))
+          throw new Error('unexpected getBookmarks response');
+        return data.bookmarks;
+      }
+
+      /* ---- offline write queue ---- */
+      let OUTBOX_SEQ = Date.now();
+      function loadOutbox() {
+        try { const o = JSON.parse(localStorage.getItem(LS_OUTBOX) || '[]'); return Array.isArray(o) ? o : []; }
+        catch { return []; }
+      }
+      function saveOutbox(q) { try { localStorage.setItem(LS_OUTBOX, JSON.stringify(q)); } catch {} }
+      // Queue a write and (when we think we're online) try to flush. A newer
+      // save/delete for a bookmark supersedes an older pending save for the
+      // same id; activity entries are distinct events and never collapse.
+      function enqueue(item) {
+        const q = loadOutbox();
+        if (item.action === 'saveBookmark' || item.action === 'deleteBookmark') {
+          const id = item.action === 'saveBookmark' ? item.bookmark['Bookmark ID'] : item.id;
+          for (let i = q.length - 1; i >= 0; i--) {
+            const it = q[i];
+            const itId = it.action === 'saveBookmark' ? (it.bookmark && it.bookmark['Bookmark ID'])
+              : it.action === 'deleteBookmark' ? it.id : undefined;
+            if (itId !== undefined && itId === id) q.splice(i, 1);
+          }
+        }
+        item.seq = ++OUTBOX_SEQ;
+        q.push(item);
+        saveOutbox(q);
+        if (SHEET.online) flushOutbox();
+      }
+      // Drain the queue in order. Stop at the first failure (treat the sheet
+      // as offline) and keep the remainder for the next attempt. Items are
+      // removed by seq so a concurrent enqueue can't drop an unsent write.
+      async function flushOutbox() {
+        if (SHEET.flushing || !sheetEnabled()) return;
+        SHEET.flushing = true;
+        try {
+          while (true) {
+            const q = loadOutbox();
+            if (!q.length) { SHEET.online = true; break; }
+            const item = q[0];
+            try {
+              const { seq, ...body } = item;
+              await sheetPost(body);
+            } catch {
+              SHEET.online = false;
+              break;
+            }
+            SHEET.online = true;
+            saveOutbox(loadOutbox().filter(x => x.seq !== item.seq));
+          }
+        } finally {
+          SHEET.flushing = false;
+        }
+      }
+
+      /* ---- reconcile + activity ---- */
+      // Diff the current list against the last-known sheet state: changed or
+      // new rows queue a save, vanished ids queue a delete. Cheap, idempotent,
+      // and a no-op without a token — safe to call after any change.
+      function syncSheet() {
+        if (!sheetEnabled()) return;
+        const seen = new Set();
+        for (const bm of STATE.bookmarks) {
+          seen.add(bm.id);
+          const json = JSON.stringify(toSheetRow(bm));
+          if (SHEET.snapshot[bm.id] !== json) {
+            SHEET.snapshot[bm.id] = json;
+            enqueue({ action: 'saveBookmark', bookmark: JSON.parse(json) });
+          }
+        }
+        for (const id of Object.keys(SHEET.snapshot)) {
+          if (!seen.has(id)) {
+            delete SHEET.snapshot[id];
+            enqueue({ action: 'deleteBookmark', id });
+          }
+        }
+      }
+      // Treat the current list as already in step with the sheet (used right
+      // after a load) so we don't immediately echo it all back.
+      function rebuildSnapshot() {
+        SHEET.snapshot = Object.create(null);
+        for (const bm of STATE.bookmarks) SHEET.snapshot[bm.id] = JSON.stringify(toSheetRow(bm));
+      }
+      // Mirror a recorded user action to the sheet's activity feed.
+      function queueActivity(a) {
+        if (!sheetEnabled() || !a) return;
+        enqueue({
+          action: 'logActivity',
+          entry: {
+            'Type': a.type || '',
+            'Name': a.name || '',
+            'URL': a.url || '',
+            'Detail': a.text || a.query || '',
+            'Timestamp': new Date().toISOString()
+          }
+        });
+      }
+
+      /* ---- load ---- */
+      // A loose URL key so the first-run merge doesn't duplicate a site the
+      // sheet already lists (ignoring scheme, leading www, and trailing slash).
+      function normUrlKey(u) {
+        return String(u || '').trim().toLowerCase()
+          .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+      }
+      // Pull the list from the sheet; on any failure keep the local mirror on
+      // screen (the app keeps working offline). On success the sheet is
+      // authoritative — except the very first time this device syncs, when any
+      // bookmark it has locally that the sheet lacks is preserved and pushed
+      // up, so switching from localStorage to the sheet never loses data.
+      async function syncFromSheet() {
+        if (!sheetEnabled()) return;
+        let rows;
+        try { rows = await apiGetBookmarks(); }
+        catch (e) {
+          SHEET.online = false;   // stay on local data
+          console.warn('Bookmarks Buddy: could not reach the sheet — using local data.', e);
+          return;
+        }
+        SHEET.online = true;
+        const remote = rows.map(fromSheetRow).filter(b => b.url);
+        let firstRun = false;
+        try { firstRun = !localStorage.getItem(LS_SYNCED); } catch {}
+        if (firstRun) {
+          const have = new Set(remote.map(b => normUrlKey(b.url)));
+          const localOnly = STATE.bookmarks.filter(b => b.url && !have.has(normUrlKey(b.url)));
+          STATE.bookmarks = remote.concat(localOnly);
+        } else {
+          STATE.bookmarks = remote;
+        }
+        try { localStorage.setItem(LS_SYNCED, '1'); } catch {}
+        persistBookmarksLocal();
+        // Baseline the snapshot to the sheet's rows; syncSheet() then queues
+        // saves for any preserved local-only bookmarks (and nothing else).
+        SHEET.snapshot = Object.create(null);
+        for (const b of remote) SHEET.snapshot[b.id] = JSON.stringify(toSheetRow(b));
+        syncLayout();
+        persistLayout();
+        render();
+        syncSheet();      // push up local-only bookmarks (no-op in steady state)
+        flushOutbox();
       }
 
       function uid() { return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -1836,6 +2121,8 @@
       function recordAction(a) {
         VOICE.recentActions.unshift(Object.assign({ at: Date.now() }, a));
         if (VOICE.recentActions.length > 14) VOICE.recentActions.length = 14;
+        // Mirror the action to the sheet's activity feed (no-op without a token).
+        try { queueActivity(a); } catch {}
       }
 
       function announce(msg) {
@@ -3077,11 +3364,25 @@
       /* ================================================================
        * Init
        * ================================================================ */
-      loadData();
-      loadLayout();
-      syncLayout();
-      persistLayout();
-      render();
+      /* Boot: show the local mirror instantly, then reconcile with the sheet —
+         pushing any changes queued while offline up first, so the fetch
+         reflects them. Falls back to local data when the sheet is unreachable. */
+      async function bootstrap() {
+        loadData();
+        loadLayout();
+        syncLayout();
+        persistLayout();
+        render();
+        if (!sheetEnabled()) return;
+        rebuildSnapshot();
+        try { await flushOutbox(); } catch {}
+        await syncFromSheet();
+      }
+      bootstrap();
+
+      // Resync the queue when the network returns, plus a slow safety-net poll.
+      window.addEventListener('online', () => flushOutbox());
+      setInterval(() => { if (sheetEnabled() && loadOutbox().length) flushOutbox(); }, 30000);
 
       // Keep the "Recent" timestamps fresh without a heavy re-render.
       setInterval(() => {
