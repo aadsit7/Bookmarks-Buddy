@@ -1051,6 +1051,64 @@
         return { url: slug + '.com', name: titleCase(cleaned) };
       }
 
+      // Verbs that mean "attach to something already open" rather than "open
+      // fresh" — the signal that a split request targets a tab already on screen.
+      const SPLIT_ATTACH_VERBS = /\b(add|put|place|attach|include|throw|stick|drop|append|join|tack)\b/;
+      // A reference naming an existing tab: "for the Wikipedia tab", "to that
+      // window". The captured group is the tab's name ("" for this/that/current).
+      // "tab"/"window" only (not "page") — "go to the X page" means open X.
+      const SPLIT_ANCHOR_RE = /\b(?:for|to|onto|into|on|beside|alongside|next to)\s+(?:the\s+|this\s+|that\s+|my\s+|current\s+|currently\s+|currently open\s+|open\s+|already open\s+|existing\s+|its?\s+)*([\w .'-]*?)\s*\b(?:tab|window)\b/;
+      // A bare "this/that/current tab" pointer with no name.
+      const SPLIT_THIS_TAB_RE = /\b(?:this|that|the current|current|currently open|already open|the open|its?|it)\s+(?:tab|window)\b/;
+
+      // Detect "add <site> to the split view [for the <open tab> tab]" — adding a
+      // site BESIDE a tab that's already open. Returns { kind:'addsplit',
+      // queries:[..], anchor } or null. Only fires when something is actually
+      // open to attach to, so it never steals a plain "split A and B" (which
+      // opens both fresh) or an "add <company>" bookmark save.
+      function parseAddToSplit(t) {
+        pruneWindows();
+        if (!VOICE.openWindows.length) return null;     // nothing open to attach to
+
+        const splitIntent = SPLIT_STRONG_RE.test(t);
+        const anchorM = t.match(SPLIT_ANCHOR_RE);
+        const thisTab = !anchorM && SPLIT_THIS_TAB_RE.test(t);
+        const attachVerb = SPLIT_ATTACH_VERBS.test(t);
+
+        // Require a clear attach signal: either an explicit reference to an
+        // existing tab paired with a split/attach action ("add YouTube to the
+        // Wikipedia tab"), or the "add … split view" shorthand while a tab is
+        // open. A plain "split view A and B" (no attach verb, no tab reference)
+        // is left for parseSplit, which opens both fresh.
+        const tabRef = !!anchorM || thisTab;
+        if (!((tabRef && (attachVerb || splitIntent)) || (attachVerb && splitIntent))) return null;
+
+        // Pull the anchor reference out first; whatever it captured names the
+        // open tab to attach to ("" → the most recent).
+        let anchor = null;
+        let q = ' ' + t + ' ';
+        if (anchorM) { anchor = (anchorM[1] || '').trim(); q = q.replace(anchorM[0], ' '); }
+        else if (thisTab) { anchor = ''; q = q.replace(SPLIT_THIS_TAB_RE, ' '); }
+
+        // Strip split/attach phrasing and filler the same way parseSplit does,
+        // keeping the joiners so several added sites stay separable.
+        q = q
+          .replace(SPLIT_STRONG_RE, ' ')
+          .replace(SPLIT_LOOSE_RE, ' ')
+          .replace(ACTION_VERBS, ' ')
+          .replace(SPLIT_ATTACH_VERBS, ' ')
+          .replace(/\b(move|set)\b/g, ' ')
+          .replace(/\b(in|on|into|to|as)\s+(a\s+|the\s+)?(new\s+)?(view|screen|window|tab|tabs)\b/g, ' ')
+          .replace(/\b(please|for me|right now|now|real quick|hey|ok|okay|bookmarks? buddy|can you|could you|would you|will you|i want to|i need to|i would like to|i'd like to|let's|lets)\b/g, ' ')
+          .replace(/\b(website|web site|the site|site|the page|page|the app|dot com|dot org|dot net)\b/g, ' ')
+          .replace(/\b(in|on|into|my|the|a|an|to|up|new|tab|tabs|window|view|screen|both|together|side)\b/g, ' ')
+          .replace(/\s+/g, ' ').trim();
+
+        const queries = q.split(MULTI_JOIN_RE).map(s => s.trim()).filter(Boolean).slice(0, 5);
+        if (!queries.length) return null;
+        return { kind: 'addsplit', queries, anchor };
+      }
+
       // Pull the bookmark name(s) out of a split-view request. Returns
       // { kind:'split', queries:[..] } with up to two cleaned names, or null
       // when the phrase isn't a split request at all. A single name means
@@ -1110,6 +1168,13 @@
           return { kind: 'close', query: q, all };
         }
 
+        // "Add to split view" comes first: attaching a site to a tab that's
+        // already open ("add split screen with YouTube for the Wikipedia tab")
+        // is distinct from opening a fresh split, and would otherwise be read
+        // as one. Only fires when a tab is actually open to attach to.
+        const addSplit = parseAddToSplit(t);
+        if (addSplit) return addSplit;
+
         // Split view comes before add/open so "open Notion and Gmail in a
         // split view" routes here instead of being read as a single open.
         const split = parseSplit(t);
@@ -1153,13 +1218,15 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
+            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side, or “add split screen with YouTube for this tab” to add a site beside one that’s already open. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
             : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
-          announce('Say open and one or more bookmarks or folders, split view and two names to tile them, close and a name to shut a tab, or add and a company name.');
+          announce('Say open and one or more bookmarks or folders, split view and two names to tile them, add a site to a tab that is already open, close and a name to shut a tab, or add and a company name.');
           renderSoft(); return;
         }
 
         if (cmd.kind === 'close') { handleClose(cmd); return; }
+
+        if (cmd.kind === 'addsplit') { handleAddToSplit(cmd); return; }
 
         if (cmd.kind === 'split') { handleSplit(cmd.queries); return; }
 
@@ -1412,6 +1479,67 @@
         }
       }
 
+      // "add split screen with Youtube for the Wikipedia tab" — tile a new site
+      // beside a tab that's already open. The anchor names which open tab to
+      // attach to (or "this/that tab", or nothing → the most recent); the rest
+      // names the site(s) to add. Falls back to a fresh split when no matching
+      // open tab is found, so the request never just fizzles.
+      function handleAddToSplit(cmd) {
+        pruneWindows();
+        const live = VOICE.openWindows;
+
+        // Resolve the site(s) to add beside the open tab.
+        const found = [];
+        const seen = new Set();
+        const misses = [];
+        for (const q of (cmd.queries || [])) {
+          const t = resolveTarget(q);
+          const bms = targetBookmarks(t);
+          if (!bms.length) { misses.push(q); continue; }
+          for (const bm of bms) if (!seen.has(bm.id)) { seen.add(bm.id); found.push(bm); }
+        }
+        if (!found.length) {
+          const label = (cmd.queries || []).join('” or “');
+          recordAction({ type: 'notfound', query: (cmd.queries || []).join(' and ') });
+          showToast('No bookmark matches “' + label + '”', 'search-x');
+          announce('No bookmark found to add to the split view.');
+          renderSoft();
+          return;
+        }
+
+        // Nothing open to attach to — open the new site(s) in a fresh split.
+        if (!live.length) {
+          openSplitView(found, { viaVoice: true });
+          if (misses.length) showToast('Couldn’t find “' + misses[0] + '”', 'search-x');
+          return;
+        }
+
+        // Pick the anchor tab: a spoken name is fuzzy-matched against the open
+        // tabs; "this tab" or no name uses the most recently opened one.
+        let anchor = live[live.length - 1];
+        const aq = (cmd.anchor || '').trim();
+        if (aq) {
+          let best = null;
+          for (const w of live) {
+            const score = scoreBookmark(aq, { name: w.name, url: w.host });
+            if (score >= 0.42 && (!best || score > best.score)) best = { w, score };
+          }
+          if (best) anchor = best.w;
+        }
+
+        // Don't re-open the anchor itself if it was also named as a site to add.
+        const adds = anchor ? found.filter(bm => bm.id !== anchor.id) : found;
+        if (!adds.length) {
+          showToast('Name a different site to add beside it', 'mic');
+          announce('Tell me which site to add beside that tab.');
+          renderSoft();
+          return;
+        }
+
+        addToSplitView(anchor, adds, { viaVoice: true });
+        if (misses.length) showToast('Couldn’t find “' + misses[0] + '”', 'search-x');
+      }
+
       // Window features that tile pop-ups across the screen, simulating the
       // browser's split view from a plain web page. One page takes the left
       // half (leaving room to add a second by hand); two sit side by side; more
@@ -1420,7 +1548,10 @@
       // — with either set, window.open() returns null even on success, which
       // would defeat the open-vs-blocked detection below. We sever the opener
       // link manually after the window is handed back instead.
-      function tileFeatures(count) {
+      // The tile rectangles, as {left,top,width,height} objects. Used both to
+      // build window.open feature strings (new panes) and to moveTo/resizeTo an
+      // already-open tab when adding it to a split view.
+      function tileRects(count) {
         const scr = window.screen || {};
         const sw = scr.availWidth || scr.width || window.innerWidth || 1280;
         const sh = scr.availHeight || scr.height || window.innerHeight || 800;
@@ -1428,18 +1559,24 @@
         const sy = scr.availTop || 0;
         if (count <= 1) {
           const half = Math.floor(sw / 2);
-          return ['left=' + sx + ',top=' + sy + ',width=' + half + ',height=' + sh];
+          return [{ left: sx, top: sy, width: half, height: sh }];
         }
         const cols = count <= 2 ? count : Math.ceil(Math.sqrt(count));
         const rows = Math.ceil(count / cols);
         const cw = Math.floor(sw / cols);
         const ch = Math.floor(sh / rows);
-        const feats = [];
+        const rects = [];
         for (let i = 0; i < count; i++) {
           const c = i % cols, r = Math.floor(i / cols);
-          feats.push('left=' + (sx + c * cw) + ',top=' + (sy + r * ch) + ',width=' + cw + ',height=' + ch);
+          rects.push({ left: sx + c * cw, top: sy + r * ch, width: cw, height: ch });
         }
-        return feats;
+        return rects;
+      }
+      function rectFeature(rc) {
+        return 'left=' + rc.left + ',top=' + rc.top + ',width=' + rc.width + ',height=' + rc.height;
+      }
+      function tileFeatures(count) {
+        return tileRects(count).map(rectFeature);
       }
 
       // Open one positioned window and sever its opener link. Returns the
@@ -1499,6 +1636,56 @@
         }
         if (opened) showToast('Opening ' + s.label + ' in a split view', 'columns-2');
         render();
+      }
+
+      // Add one or more sites BESIDE a tab that's already open, mirroring
+      // Chrome's "Add tab to new split view". The anchor is an entry from the
+      // open-window registry; we re-tile it into the first slot and open the new
+      // pane(s) in the remaining slot(s). The anchor handle may be COOP-severed
+      // (so moveTo silently fails) — the new panes still tile beside it.
+      function addToSplitView(anchor, bms, { viaVoice = false } = {}) {
+        const valid = (bms || []).filter(bm => bm && ensureScheme(bm.url));
+        if (!valid.length) { showToast('Those bookmarks have no address', 'triangle-alert'); return; }
+
+        const total = Math.min(1 + valid.length, 6);
+        const adds = valid.slice(0, total - 1);
+        const rects = tileRects(total);
+
+        // Re-tile the existing tab into the first slot (best effort).
+        if (anchor && anchor.win) {
+          const rc = rects[0];
+          try { anchor.win.moveTo(rc.left, rc.top); anchor.win.resizeTo(rc.width, rc.height); anchor.win.focus(); } catch {}
+          anchor.at = Date.now();
+        }
+
+        const anchorLabel = anchor ? anchor.name : '';
+        const addLabel = adds.map(b => b.name || hostCore(b.url)).join(' & ');
+        const label = anchorLabel ? anchorLabel + ' & ' + addLabel : addLabel;
+
+        let opened = 0;
+        const blocked = [];
+        adds.forEach((bm, i) => {
+          const feat = rectFeature(rects[i + 1]);
+          if (openAndTrack(bm, feat)) { opened++; recordAction({ type: 'split', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); }
+          else blocked.push({ bm, feat });
+        });
+
+        if (blocked.length) {
+          // Reuse the pending-split banner so a blocked pop-up opens on one tap.
+          VOICE.pendingSplit = { label, plan: blocked };
+          announce('Adding ' + addLabel + ' beside ' + (anchorLabel || 'your tab') + ' — tap to confirm.');
+          if (!VOICE.popupHintShown) {
+            VOICE.popupHintShown = true;
+            showToast('Allow pop-ups for this site to add split views hands-free', 'mouse-pointer-click');
+          } else {
+            showToast('Tap to add ' + addLabel + ' to the split view', 'mouse-pointer-click');
+          }
+        } else {
+          showToast('Adding ' + addLabel + ' beside ' + (anchorLabel || 'your tab'), 'columns-2');
+          announce('Adding ' + addLabel + ' to a split view with ' + (anchorLabel || 'your tab') + '.');
+          if (STATE.settings.speak && viaVoice) speak('Adding ' + addLabel + ' to the split view');
+        }
+        renderSoft();
       }
 
       /* ---------------- close (hands-free) ---------------- */
