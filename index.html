@@ -276,14 +276,18 @@
         border-radius: 30px;
         padding: 16px 12px 0;
         overflow: hidden;
+        border: 1px solid var(--n200);
+        /* Pearl-white surface — a soft, slightly iridescent off-white so the
+           white app tiles read against it via their own light-gray shadow. */
         background:
-          radial-gradient(120% 80% at 18% 0%, rgba(127,227,255,0.32), transparent 60%),
-          radial-gradient(120% 90% at 100% 100%, rgba(3,114,255,0.5), transparent 55%),
-          linear-gradient(160deg, var(--navy), var(--navy-deep));
-        box-shadow: var(--shadow-hover), inset 0 1px 0 rgba(255,255,255,0.14);
+          radial-gradient(135% 95% at 12% 0%, #ffffff, rgba(255,255,255,0) 55%),
+          radial-gradient(120% 120% at 100% 0%, #eef0f6, rgba(238,240,246,0) 60%),
+          linear-gradient(165deg, #f7f8fb 0%, #eceef4 100%);
+        box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.9);
       }
 
       .sb-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+      .springboard.editing, .springboard.editing .sb-viewport { touch-action: none; }
       .sb-track { display: flex; height: 100%; transition: transform .32s var(--ease); will-change: transform; }
       .sb-page {
         flex: 0 0 auto;
@@ -291,31 +295,34 @@
         grid-auto-rows: min-content;
         gap: 26px 0; align-content: start; padding: 18px 20px 22px;
       }
-      .sb-empty-page { grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.72); font-size: 13.5px; line-height: 1.6; padding: 48px 12px; }
+      .sb-empty-page { grid-column: 1 / -1; text-align: center; color: var(--n500); font-size: 13.5px; line-height: 1.6; padding: 48px 12px; }
 
-      .sb-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; user-select: none; }
+      .sb-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
       .sb-tile, .sb-folder {
         position: relative; width: 62px; height: 62px; border-radius: 16px; cursor: pointer;
         display: grid; place-items: center; overflow: hidden;
-        background: rgba(255,255,255,0.97);
-        box-shadow: 0 6px 14px rgba(0,0,0,0.24);
-        transition: transform .14s var(--ease), outline-color .14s;
+        background: #fff;
+        border: 1px solid rgba(120,130,160,0.16);
+        /* Soft light-gray shadow so each white tile stays clearly readable on
+           the pearl-white board. */
+        box-shadow: 0 6px 16px rgba(60,64,80,0.16), 0 1px 4px rgba(60,64,80,0.10);
+        transition: transform .14s var(--ease), box-shadow .16s, outline-color .14s;
       }
-      .sb-tile:hover, .sb-folder:hover { transform: translateY(-2px); }
-      .sb-tile img { width: 38px; height: 38px; display: block; }
+      .sb-tile:hover, .sb-folder:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(60,64,80,0.22), 0 2px 6px rgba(60,64,80,0.12); }
+      .sb-tile img { width: 38px; height: 38px; display: block; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
       .sb-tile .sb-letter { font-size: 26px; font-weight: 800; color: var(--primary); }
       .sb-tile.noimg::after { content: attr(data-letter); font-size: 26px; font-weight: 800; color: var(--primary); }
       .sb-label {
-        font-size: 11.5px; font-weight: 600; color: #fff; text-align: center; line-height: 1.2;
+        font-size: 11.5px; font-weight: 600; color: var(--navy-deep); text-align: center; line-height: 1.2;
         max-width: 76px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        text-shadow: 0 1px 2px rgba(255,255,255,0.7);
       }
 
       /* Folder tile — a frosted square holding a 3×3 preview of its apps */
-      .sb-folder { background: rgba(255,255,255,0.26); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: 6px; }
+      .sb-folder { background: rgba(118,128,155,0.18); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: 6px; }
       .sb-folder-grid { width: 100%; height: 100%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 3px; }
-      .sb-mini { border-radius: 5px; background: rgba(255,255,255,0.92); display: grid; place-items: center; overflow: hidden; }
-      .sb-mini img { width: 100%; height: 100%; object-fit: contain; padding: 1px; }
+      .sb-mini { border-radius: 5px; background: rgba(255,255,255,0.95); display: grid; place-items: center; overflow: hidden; }
+      .sb-mini img { width: 100%; height: 100%; object-fit: contain; padding: 1px; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 
       /* Jiggle / edit mode */
       .sb-badge {
@@ -328,26 +335,37 @@
       .springboard.editing .sb-cell { animation: jiggle .32s infinite; }
       .springboard.editing .sb-cell:nth-child(even) { animation-delay: -.16s; }
       .springboard.editing .sb-tile, .springboard.editing .sb-folder { cursor: grab; }
-      .sb-cell.dragging { opacity: .35; }
+      .sb-cell.dragging { opacity: .28; }
       @keyframes jiggle { 0% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.3deg); } 100% { transform: rotate(-1.2deg); } }
+
+      /* Floating clone that follows the finger/cursor while dragging — the
+         "lift and carry" gesture that makes rearranging feel like an iPhone. */
+      .sb-ghost {
+        position: fixed; left: 0; top: 0; z-index: 9999; margin: 0;
+        display: flex; flex-direction: column; align-items: center; gap: 7px;
+        pointer-events: none; transform-origin: 0 0; will-change: transform;
+        filter: drop-shadow(0 16px 28px rgba(22,31,91,0.32));
+      }
+      .sb-ghost .sb-label { color: var(--navy-deep); text-shadow: 0 1px 2px rgba(255,255,255,0.8); }
 
       /* Drop indicators while dragging */
       .sb-cell.drop-before::before, .sb-cell.drop-after::after {
         content: ''; position: absolute; top: 2px; bottom: 24px; width: 4px; border-radius: 3px;
-        background: var(--cyan-hi); box-shadow: 0 0 9px var(--cyan); z-index: 4;
+        background: var(--primary); box-shadow: 0 0 8px rgba(3,114,255,0.5); z-index: 4;
       }
       .sb-cell.drop-before::before { left: -7px; }
       .sb-cell.drop-after::after { right: -7px; }
-      .sb-cell.drop-folder .sb-tile, .sb-cell.drop-folder .sb-folder { outline: 3px solid var(--cyan-hi); transform: scale(1.09); }
-      .sb-page.drop-page { outline: 2px dashed rgba(255,255,255,0.45); outline-offset: -10px; border-radius: 18px; }
+      .sb-cell.drop-folder .sb-tile, .sb-cell.drop-folder .sb-folder { outline: 3px solid var(--primary); transform: scale(1.09); }
+      .sb-page.drop-page { outline: 2px dashed rgba(22,31,91,0.28); outline-offset: -10px; border-radius: 18px; }
+      .sb-folder-panel.pop-out { box-shadow: 0 30px 70px rgba(22,31,91,0.42), 0 0 0 3px rgba(3,114,255,0.45); }
 
       /* Page dots */
       .sb-dots { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 0 4px; }
-      .sb-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(255,255,255,0.38); transition: background .15s, transform .15s; }
-      .sb-dot.active { background: #fff; transform: scale(1.18); }
+      .sb-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(22,31,91,0.2); transition: background .15s, transform .15s; }
+      .sb-dot.active { background: var(--primary); transform: scale(1.18); }
       /* "Add a page" pill that sits at the end of the dot strip (edit mode) */
-      .sb-dot-add { width: 20px; height: 20px; border-radius: 50%; border: none; padding: 0; cursor: pointer; margin-left: 4px; display: grid; place-items: center; background: rgba(255,255,255,0.2); color: #fff; transition: background .15s, transform .12s; }
-      .sb-dot-add:hover { background: rgba(255,255,255,0.4); }
+      .sb-dot-add { width: 20px; height: 20px; border-radius: 50%; border: none; padding: 0; cursor: pointer; margin-left: 4px; display: grid; place-items: center; background: rgba(22,31,91,0.08); color: var(--n600); transition: background .15s, transform .12s; }
+      .sb-dot-add:hover { background: rgba(22,31,91,0.16); }
       .sb-dot-add:active { transform: scale(.9); }
       .sb-dot-add svg { width: 13px; height: 13px; }
 
@@ -355,13 +373,13 @@
          springboard edges and usable with a mouse (swipe still works on touch) */
       .sb-arrow {
         position: absolute; top: 50%; transform: translateY(-50%); z-index: 6;
-        width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
-        display: grid; place-items: center; color: #fff;
-        background: rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--n200); cursor: pointer;
+        display: grid; place-items: center; color: var(--navy-deep);
+        background: rgba(255,255,255,0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        box-shadow: 0 4px 14px rgba(22,31,91,0.12);
         transition: background .14s, opacity .18s, transform .12s;
       }
-      .sb-arrow:hover { background: rgba(255,255,255,0.32); }
+      .sb-arrow:hover { background: #fff; }
       .sb-arrow:active { transform: translateY(-50%) scale(.92); }
       .sb-arrow svg { width: 22px; height: 22px; }
       .sb-arrow-prev { left: 12px; }
@@ -371,18 +389,18 @@
       /* Dock / footer with the pencil edit toggle (bottom-left) */
       .sb-dock {
         display: flex; align-items: center; gap: 12px; margin-top: auto;
-        padding: 12px 14px 16px; border-top: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.14);
+        padding: 12px 14px 16px; border-top: 1px solid var(--n200); background: rgba(255,255,255,0.45);
       }
       .sb-edit-btn, .sb-add-btn {
         width: 44px; height: 44px; border-radius: 14px; border: none; cursor: pointer; flex-shrink: 0;
-        display: grid; place-items: center; background: rgba(255,255,255,0.16); color: #fff;
+        display: grid; place-items: center; background: rgba(22,31,91,0.06); color: var(--navy-deep);
         transition: background .14s, transform .12s, color .14s;
       }
-      .sb-edit-btn:hover, .sb-add-btn:hover { background: rgba(255,255,255,0.3); }
+      .sb-edit-btn:hover, .sb-add-btn:hover { background: rgba(22,31,91,0.12); }
       .sb-edit-btn:active, .sb-add-btn:active { transform: scale(.95); }
       .sb-edit-btn svg, .sb-add-btn svg { width: 20px; height: 20px; }
-      .sb-edit-btn.on { background: #fff; color: var(--navy); }
-      .sb-dock-hint { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); text-align: center; }
+      .sb-edit-btn.on { background: var(--navy); color: #fff; }
+      .sb-dock-hint { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--n500); text-align: center; }
 
       /* Overlays: folder view + add/edit/delete modals */
       .sb-overlay { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 20px; }
@@ -2714,7 +2732,7 @@
               <button class="sb-edit-btn ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
                 <i data-lucide="${edit ? 'check' : 'pencil'}"></i>
               </button>
-              <div class="sb-dock-hint">${edit ? 'Drag to move · drop on another to make a folder · drag to an edge or tap ⊕ for a new page' : ''}</div>
+              <div class="sb-dock-hint">${edit ? 'Drag to move · drop onto another app to make a folder · drag out of a folder to pull it back · drag to an edge for a new page' : 'Tip: press and hold an app — or tap the pencil — to rearrange'}</div>
               <button class="sb-add-btn" data-action="add-app" title="Add a website" aria-label="Add a website"><i data-lucide="plus"></i></button>
             </div>
           </div>`;
@@ -2740,7 +2758,7 @@
           ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
           : `<span class="sb-letter">${escHtml(letter)}</span>`;
         return `
-          <div class="sb-cell" data-sb="app" data-page="${pi}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
+          <div class="sb-cell" data-sb="app" data-page="${pi}" data-index="${idx}" data-id="${escAttr(bm.id)}">
             ${edit ? `<button class="sb-badge" data-action="confirm-delete" data-id="${escAttr(bm.id)}" title="Delete" aria-label="Delete ${escAttr(bm.name)}"><i data-lucide="x"></i></button>` : ''}
             <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
             <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
@@ -2755,7 +2773,7 @@
           return `<span class="sb-mini">${fav ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove()">` : ''}</span>`;
         }).join('');
         return `
-          <div class="sb-cell" data-sb="folder" data-page="${pi}" data-index="${idx}" data-fid="${escAttr(folder.id)}" draggable="${edit ? 'true' : 'false'}">
+          <div class="sb-cell" data-sb="folder" data-page="${pi}" data-index="${idx}" data-fid="${escAttr(folder.id)}">
             <div class="sb-folder" data-action="open-folder" data-fid="${escAttr(folder.id)}" title="${escAttr(folder.name)}">
               <div class="sb-folder-grid">${preview}</div>
             </div>
@@ -2782,7 +2800,7 @@
             ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
             : `<span class="sb-letter">${escHtml(letter)}</span>`;
           return `
-            <div class="sb-cell" data-sb="fapp" data-fid="${escAttr(folder.id)}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
+            <div class="sb-cell" data-sb="fapp" data-fid="${escAttr(folder.id)}" data-index="${idx}" data-id="${escAttr(bm.id)}">
               ${edit ? `<button class="sb-badge" data-action="remove-from-folder" data-fid="${escAttr(folder.id)}" data-id="${escAttr(bm.id)}" title="Move out of folder" aria-label="Move ${escAttr(bm.name)} out of folder"><i data-lucide="x"></i></button>` : ''}
               <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
               <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
@@ -3024,6 +3042,9 @@
         const app = document.getElementById('app');
 
         app.onclick = (e) => {
+          // Swallow the synthetic click that fires right after a drag/long-press
+          // so "carry an app" never also "opens" it.
+          if (Date.now() - PDRAG.dragEndedAt < 350) { PDRAG.dragEndedAt = 0; e.preventDefault(); e.stopPropagation(); return; }
           const target = e.target.closest('[data-action]');
           if (!target) return;
           const action = target.getAttribute('data-action');
@@ -3114,12 +3135,11 @@
           };
         }
 
-        // Drag-and-drop rearranging (assignment, not addEventListener, so it
-        // doesn't stack up across re-renders).
-        app.ondragstart = onDragStart;
-        app.ondragover  = onDragOver;
-        app.ondragend   = onDragEnd;
-        app.ondrop      = onDrop;
+        // Pointer-driven "lift and carry" rearranging (assignment, not
+        // addEventListener, so handlers don't stack across re-renders). Killing
+        // the native dragstart stops the browser ghost-dragging a favicon image.
+        app.onpointerdown = sbPointerDown;
+        app.ondragstart = (e) => { if (e.target.closest('[data-sb]')) e.preventDefault(); };
 
         // Touch swipe between pages (when not rearranging).
         const vp = document.getElementById('sb-viewport');
@@ -3172,86 +3192,196 @@
       function clearDropMarkers() {
         document.querySelectorAll('.drop-before, .drop-after, .drop-folder').forEach(n => n.classList.remove('drop-before', 'drop-after', 'drop-folder'));
         document.querySelectorAll('.drop-page').forEach(n => n.classList.remove('drop-page'));
-      }
-      function cleanupDrag() {
-        clearDropMarkers();
-        clearEdgeFlip();
-        document.querySelectorAll('.sb-cell.dragging').forEach(n => n.classList.remove('dragging'));
-        DRAG.from = null; DRAG.intent = null;
+        document.querySelectorAll('.sb-folder-panel.pop-out').forEach(n => n.classList.remove('pop-out'));
       }
 
-      // iPhone-style "drag to the edge to turn the page": while dragging an app
+      // iPhone-style "drag to the edge to turn the page": while carrying an app
       // near the left/right border of the viewport, flip to the neighbouring
-      // page after a short hover so you can carry the app across pages.
+      // page after a short hover so you can move the app across pages.
       let edgeFlipTimer = null;
       function clearEdgeFlip() { if (edgeFlipTimer) { clearTimeout(edgeFlipTimer); edgeFlipTimer = null; } }
-      function handleEdgeFlip(e) {
+      function handleEdgeFlip(clientX) {
         // Not while reordering inside an open folder — that drag isn't a page move.
         if (STATE.openFolderId) { clearEdgeFlip(); return; }
         const vp = document.getElementById('sb-viewport');
         if (!vp) { clearEdgeFlip(); return; }
         const r = vp.getBoundingClientRect();
-        const zone = 64;
-        const dir = (e.clientX - r.left < zone) ? -1 : (r.right - e.clientX < zone) ? 1 : 0;
+        const zone = 70;
+        const dir = (clientX - r.left < zone) ? -1 : (r.right - clientX < zone) ? 1 : 0;
         const target = STATE.currentPage + dir;
         if (!dir || target < 0 || target >= STATE.layout.pages.length) { clearEdgeFlip(); return; }
         if (edgeFlipTimer) return; // already counting down toward a flip
-        edgeFlipTimer = setTimeout(() => { edgeFlipTimer = null; gotoPage(target); }, 550);
+        edgeFlipTimer = setTimeout(() => { edgeFlipTimer = null; gotoPage(target); }, 500);
       }
 
-      function onDragStart(e) {
+      /* ----- pointer-driven "lift and carry" drag (touch + mouse) -----
+       * Replaces native HTML5 drag-and-drop, which felt rigid and didn't work
+       * on touch. A pressed app is lifted into a floating clone that follows the
+       * pointer 1:1; the cell underneath is highlighted to show where it lands.
+       * Handles reordering, building folders, moving across pages, and pulling
+       * an app back out of an open folder — one smooth gesture for all of it. */
+      const PDRAG = {
+        pointerId: null, cell: null, loc: null, sourceIsApp: false,
+        ghost: null, offX: 0, offY: 0, startX: 0, startY: 0, lastX: 0, lastY: 0,
+        lifted: false, longPress: null, dragEndedAt: 0
+      };
+      const PDRAG_SCALE = 1.08;
+
+      function sbTileRect(cell) {
+        const t = cell.querySelector('.sb-tile, .sb-folder');
+        return (t || cell).getBoundingClientRect();
+      }
+      // Re-find a cell after a re-render by the identity of what it holds.
+      function sbFindCell(loc) {
+        if (!loc) return null;
+        if (loc.kind === 'folder') return document.querySelector('[data-sb="fapp"][data-id="' + loc.id + '"]');
+        if (loc.isFolder)          return document.querySelector('[data-sb="folder"][data-fid="' + loc.fid + '"]');
+        return document.querySelector('[data-sb="app"][data-id="' + loc.id + '"]');
+      }
+
+      function sbPointerDown(e) {
+        if (PDRAG.pointerId !== null) return;                 // a drag is already in flight
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (e.target.closest('.sb-badge')) return;            // the ×/remove button — let it click
         const cell = e.target.closest('[data-sb]');
-        if (!cell || !STATE.editMode) { if (e.preventDefault) e.preventDefault(); return; }
-        DRAG.from = readLoc(cell);
-        DRAG.intent = null;
-        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', cell.getAttribute('data-id') || cell.getAttribute('data-fid') || 'x'); } catch {}
-        cell.classList.add('dragging');
+        if (!cell) return;
+
+        PDRAG.pointerId = e.pointerId;
+        PDRAG.cell = cell;
+        PDRAG.loc = readLoc(cell);
+        PDRAG.sourceIsApp = (PDRAG.loc.kind === 'folder') || (PDRAG.loc.kind === 'page' && !PDRAG.loc.isFolder);
+        PDRAG.startX = PDRAG.lastX = e.clientX;
+        PDRAG.startY = PDRAG.lastY = e.clientY;
+        const r = sbTileRect(cell);
+        PDRAG.offX = e.clientX - r.left;
+        PDRAG.offY = e.clientY - r.top;
+        PDRAG.lifted = false;
+
+        window.addEventListener('pointermove', sbPointerMove, { passive: false });
+        window.addEventListener('pointerup', sbPointerUp);
+        window.addEventListener('pointercancel', sbPointerCancel);
+
+        // Not in arrange mode yet → press and hold to enter "jiggle" mode and
+        // lift the app in the same motion, just like a phone home screen. (In
+        // arrange mode a small drag lifts immediately — see sbPointerMove.)
+        if (!STATE.editMode) {
+          PDRAG.longPress = setTimeout(() => {
+            PDRAG.longPress = null;
+            if (PDRAG.pointerId === null) return;
+            STATE.editMode = true;
+            normalizeLayout(); persistLayout(); render();
+            const fresh = sbFindCell(PDRAG.loc);    // the re-rendered node for this app
+            if (!fresh) { PDRAG.dragEndedAt = Date.now(); sbEndGesture(false); return; }
+            PDRAG.cell = fresh;
+            const r = sbTileRect(fresh);            // keep the grab point under the finger
+            PDRAG.offX = Math.min(Math.max(PDRAG.lastX - r.left, 8), r.width - 8);
+            PDRAG.offY = Math.min(Math.max(PDRAG.lastY - r.top, 8), r.height - 8);
+            sbLift();
+            sbUpdateIntent(PDRAG.lastX, PDRAG.lastY);
+          }, 430);
+        }
       }
 
-      function onDragOver(e) {
-        if (!DRAG.from) return;
-        // Dragging near a left/right edge turns the page after a brief hover.
-        handleEdgeFlip(e);
-        // Hovering a page dot flips to that page so you can drop across pages.
-        const dot = e.target.closest('[data-dot]');
-        if (dot) { e.preventDefault(); const i = +dot.getAttribute('data-dot'); if (i !== STATE.currentPage) gotoPage(i); return; }
+      function sbLift() {
+        const cell = PDRAG.cell;
+        if (!cell || PDRAG.lifted) return;
+        PDRAG.lifted = true;
+        if (PDRAG.longPress) { clearTimeout(PDRAG.longPress); PDRAG.longPress = null; }
+        const tile = cell.querySelector('.sb-tile, .sb-folder');
+        const label = cell.querySelector('.sb-label');
+        const r = sbTileRect(cell);
+        const ghost = document.createElement('div');
+        ghost.className = 'sb-ghost';
+        ghost.style.width = r.width + 'px';
+        if (tile) { const c = tile.cloneNode(true); c.style.width = r.width + 'px'; c.style.height = r.height + 'px'; ghost.appendChild(c); }
+        if (label) ghost.appendChild(label.cloneNode(true));
+        document.body.appendChild(ghost);
+        PDRAG.ghost = ghost;
+        cell.classList.add('dragging');
+        sbMoveGhost(PDRAG.lastX, PDRAG.lastY);
+      }
 
-        // An app (folder items are apps) can be dropped onto another app to make
-        // a folder, or into an existing folder; a folder can only be reordered.
-        const sourceIsApp = (DRAG.from.kind === 'folder') || (DRAG.from.kind === 'page' && !DRAG.from.isFolder);
-        const folderApps = e.target.closest('[data-folder-apps]');
-        const cell = e.target.closest('[data-sb="app"],[data-sb="folder"]');
-        const fappCell = e.target.closest('[data-sb="fapp"]');
-        const pageEl = e.target.closest('[data-sb-page]');
+      function sbMoveGhost(x, y) {
+        if (!PDRAG.ghost) return;
+        const gx = x - PDRAG.offX * PDRAG_SCALE;
+        const gy = y - PDRAG.offY * PDRAG_SCALE;
+        PDRAG.ghost.style.transform = 'translate(' + gx + 'px,' + gy + 'px) scale(' + PDRAG_SCALE + ')';
+      }
 
-        // Reordering inside an open folder.
-        if (folderApps) {
-          e.preventDefault(); clearDropMarkers();
-          const fid = folderApps.getAttribute('data-folder-apps');
-          if (fappCell) {
-            const r = fappCell.getBoundingClientRect();
-            const after = (e.clientX - r.left) > r.width / 2;
-            DRAG.intent = { kind: 'folder', fid, pos: after ? 'after' : 'before', index: +fappCell.getAttribute('data-index') };
-            fappCell.classList.add(after ? 'drop-after' : 'drop-before');
-          } else {
-            DRAG.intent = { kind: 'folder', fid, pos: 'append' };
-            folderApps.classList.add('drop-page');
+      function sbPointerMove(e) {
+        if (e.pointerId !== PDRAG.pointerId) return;
+        PDRAG.lastX = e.clientX; PDRAG.lastY = e.clientY;
+        if (!PDRAG.lifted) {
+          const dist = Math.hypot(e.clientX - PDRAG.startX, e.clientY - PDRAG.startY);
+          if (!STATE.editMode) {
+            // Moved before the hold completed → it's a scroll/swipe, not a lift.
+            if (dist > 10) sbEndGesture(false);
+            return;
+          }
+          if (dist > 6) sbLift();
+          if (!PDRAG.lifted) return;
+        }
+        e.preventDefault();
+        sbMoveGhost(e.clientX, e.clientY);
+        sbUpdateIntent(e.clientX, e.clientY);
+      }
+
+      // Work out where a release right now would land the app, and light up the
+      // matching drop indicator. Mirrors the old onDragOver, but coordinate-driven.
+      function sbUpdateIntent(x, y) {
+        handleEdgeFlip(x);
+        if (PDRAG.ghost) PDRAG.ghost.style.visibility = 'hidden';   // so it isn't the hit-test result
+        const el = document.elementFromPoint(x, y);
+        if (PDRAG.ghost) PDRAG.ghost.style.visibility = '';
+        clearDropMarkers();
+        DRAG.from = PDRAG.loc; DRAG.intent = null;
+        if (!el) return;
+
+        // Hovering a page dot flips to that page so you can carry across pages.
+        const dot = el.closest('[data-dot]');
+        if (dot) { const i = +dot.getAttribute('data-dot'); if (i !== STATE.currentPage) gotoPage(i); return; }
+
+        const sourceIsApp = PDRAG.sourceIsApp;
+
+        // ----- inside an open folder -----
+        if (STATE.openFolderId) {
+          const folderApps = el.closest('[data-folder-apps]');
+          if (folderApps) {
+            const fappCell = el.closest('[data-sb="fapp"]');
+            const fid = folderApps.getAttribute('data-folder-apps');
+            if (fappCell && fappCell !== PDRAG.cell) {
+              const r = fappCell.getBoundingClientRect();
+              const after = (x - r.left) > r.width / 2;
+              DRAG.intent = { kind: 'folder', fid, pos: after ? 'after' : 'before', index: +fappCell.getAttribute('data-index') };
+              fappCell.classList.add(after ? 'drop-after' : 'drop-before');
+            } else if (!fappCell) {
+              DRAG.intent = { kind: 'folder', fid, pos: 'append' };
+              folderApps.classList.add('drop-page');
+            }
+            return;
+          }
+          // Dragged outside the folder grid → pull the app back out onto the page.
+          if (PDRAG.loc.kind === 'folder') {
+            DRAG.intent = { kind: 'popOut' };
+            const panel = document.querySelector('.sb-folder-panel');
+            if (panel) panel.classList.add('pop-out');
           }
           return;
         }
 
-        // Onto a cell in the springboard.
+        // ----- on the springboard -----
+        const cell = el.closest('[data-sb="app"],[data-sb="folder"]');
+        if (cell === PDRAG.cell) return;          // hovering our own origin → no-op
         if (cell) {
-          e.preventDefault(); clearDropMarkers();
           const sb = cell.getAttribute('data-sb');
           const page = +cell.getAttribute('data-page');
           const index = +cell.getAttribute('data-index');
           const r = cell.getBoundingClientRect();
-          const fx = (e.clientX - r.left) / r.width;
-          if (sb === 'folder' && sourceIsApp && fx > 0.25 && fx < 0.75) {
+          const fx = (x - r.left) / r.width;
+          if (sb === 'folder' && sourceIsApp && fx > 0.24 && fx < 0.76) {
             DRAG.intent = { kind: 'intoFolder', fid: cell.getAttribute('data-fid') };
             cell.classList.add('drop-folder');
-          } else if (sb === 'app' && sourceIsApp && fx > 0.3 && fx < 0.7) {
+          } else if (sb === 'app' && sourceIsApp && fx > 0.28 && fx < 0.72) {
             DRAG.intent = { kind: 'combine', page, index };
             cell.classList.add('drop-folder');
           } else {
@@ -3261,13 +3391,77 @@
           }
           return;
         }
-
-        // Onto empty space of a page → drop at the end.
+        const pageEl = el.closest('[data-sb-page]');
         if (pageEl) {
-          e.preventDefault(); clearDropMarkers();
           DRAG.intent = { kind: 'page', page: +pageEl.getAttribute('data-sb-page'), pos: 'append' };
           pageEl.classList.add('drop-page');
+          return;
         }
+        // Anywhere else inside the board (e.g. the empty lower area of a page
+        // that only holds a few apps) → drop onto the page you're viewing.
+        if (el.closest('.sb-viewport')) {
+          DRAG.intent = { kind: 'page', page: STATE.currentPage, pos: 'append' };
+          const pe = document.querySelector('.sb-page[data-sb-page="' + STATE.currentPage + '"]');
+          if (pe) pe.classList.add('drop-page');
+        }
+      }
+
+      // Apply the pending intent to the layout. Returns true if anything moved.
+      function sbCommit() {
+        if (!DRAG.intent) return false;
+        if (DRAG.intent.kind === 'popOut') {
+          const src = getSourceRef(PDRAG.loc);
+          if (src.item && src.arr) {
+            src.arr.splice(src.arr.indexOf(src.item), 1);
+            const page = pageArr(STATE.currentPage) || STATE.layout.pages[STATE.layout.pages.length - 1];
+            if (page) page.push({ type: 'app', id: src.item.id });
+          }
+          STATE.openFolderId = null;
+        } else {
+          applyDrag(DRAG.from, DRAG.intent);
+        }
+        return true;
+      }
+
+      // Settle the floating clone in place, then drop it from the DOM.
+      function sbFinishGhost() {
+        const g = PDRAG.ghost; PDRAG.ghost = null;
+        if (!g) return;
+        const cur = g.style.transform || '';
+        g.style.transition = 'transform .16s cubic-bezier(.16,1,.3,1), opacity .16s ease';
+        g.style.transform = cur.replace(/scale\([^)]*\)/, 'scale(1)');
+        g.style.opacity = '0';
+        setTimeout(() => { try { g.remove(); } catch {} }, 200);
+      }
+
+      function sbPointerUp(e) {
+        if (e.pointerId !== PDRAG.pointerId) return;
+        if (!PDRAG.lifted) { sbEndGesture(false); return; }    // a tap/short hold, not a drag
+        const changed = sbCommit();
+        PDRAG.dragEndedAt = Date.now();                         // swallow the trailing click
+        if (PDRAG.cell) PDRAG.cell.classList.remove('dragging');
+        clearDropMarkers(); clearEdgeFlip();
+        if (changed) { normalizeLayout(); persistLayout(); render(); }
+        sbFinishGhost();
+        sbEndGesture(true);
+      }
+
+      function sbPointerCancel(e) {
+        if (e.pointerId !== PDRAG.pointerId) return;
+        sbFinishGhost();
+        sbEndGesture(true);
+      }
+
+      function sbEndGesture(keepGhost) {
+        window.removeEventListener('pointermove', sbPointerMove);
+        window.removeEventListener('pointerup', sbPointerUp);
+        window.removeEventListener('pointercancel', sbPointerCancel);
+        if (PDRAG.longPress) { clearTimeout(PDRAG.longPress); PDRAG.longPress = null; }
+        if (!keepGhost && PDRAG.ghost) { try { PDRAG.ghost.remove(); } catch {} PDRAG.ghost = null; }
+        if (PDRAG.cell) PDRAG.cell.classList.remove('dragging');
+        clearDropMarkers(); clearEdgeFlip();
+        PDRAG.pointerId = null; PDRAG.cell = null; PDRAG.loc = null; PDRAG.lifted = false; PDRAG.sourceIsApp = false;
+        DRAG.from = null; DRAG.intent = null;
       }
 
       function getSourceRef(from) {
@@ -3308,18 +3502,6 @@
           else { let ti = targetArr.indexOf(refItem); if (ti < 0) ti = targetArr.length; targetArr.splice(intent.pos === 'after' ? ti + 1 : ti, 0, asApp(item)); }
         }
       }
-
-      function onDrop(e) {
-        if (!DRAG.from || !DRAG.intent) { cleanupDrag(); return; }
-        e.preventDefault();
-        applyDrag(DRAG.from, DRAG.intent);
-        cleanupDrag();
-        normalizeLayout();
-        persistLayout();
-        render();
-      }
-
-      function onDragEnd() { cleanupDrag(); }
 
       window.addEventListener('beforeunload', () => { persistBookmarks(); persistSettings(); });
 
