@@ -217,6 +217,7 @@
       .recent-ic { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; }
       .recent-ic svg { width: 15px; height: 15px; }
       .recent-ic.opened { background: var(--quote); color: var(--primary); }
+      .recent-ic.split { background: #eef2ff; color: #4f46e5; }
       .recent-ic.added { background: #ecfdf5; color: var(--green); }
       .recent-ic.blocked { background: #fffbeb; color: var(--amber); }
       .recent-ic.notfound { background: #fef2f2; color: #dc2626; }
@@ -481,6 +482,7 @@
         recentActions: [],         // { type, name, url, query, at }
         pendingOpen: null,         // a bookmark a popup-block kept us from opening
         pendingGroup: null,        // { label, bms:[] } a folder a popup-block kept us from opening
+        pendingSplit: null,        // { label, plan:[{bm,feat}] } a split view a popup-block kept us from opening
         popupHintShown: false,
         lastMatchedId: null,
         matchClearId: null,
@@ -804,6 +806,14 @@
       const ADD_VERBS = /\b(create a bookmark for|add a bookmark for|save a bookmark for|new bookmark for|add a bookmark|new bookmark|add to (my )?(bookmarks|favorites|favourites)|bookmark|add|save|remember)\b/;
       const STOP_RE = /\b(stop listening|stop the assistant|stop bookmarks buddy|quit listening|turn (it |yourself )?off|go to sleep|that's all|stop now)\b/;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
+      // Split view — open a page (or two pages) side by side, mirroring the
+      // browser tab menu's "Add tab to new split view". The strong form names
+      // split view/screen/tabs or "side by side" explicitly; the loose bare
+      // "split" only counts when two names are joined ("split Notion and Gmail").
+      const SPLIT_STRONG_RE = /\b(split[\s-]?(?:view|screen|tabs?)|splitview|splitscreen|side[\s-]?by[\s-]?side)\b/;
+      const SPLIT_LOOSE_RE = /\bsplit\b/;
+      // Conjunctions that separate the two sites in a split request.
+      const SPLIT_JOIN_RE = /\b(?:and|with|plus|versus|vs|alongside|next to|together with|beside)\b/;
 
       // Common TLDs people speak — used to glue a trailing "<name> com" back
       // into a real domain when the recognizer dropped the dot.
@@ -847,10 +857,49 @@
         return { url: slug + '.com', name: titleCase(t) };
       }
 
+      // Pull the bookmark name(s) out of a split-view request. Returns
+      // { kind:'split', queries:[..] } with up to two cleaned names, or null
+      // when the phrase isn't a split request at all. A single name means
+      // "open one page in a new split view"; two names means "open both side
+      // by side".
+      function parseSplit(t) {
+        const strong = SPLIT_STRONG_RE.test(t);
+        const loose = SPLIT_LOOSE_RE.test(t);
+        if (!strong && !loose) return null;
+
+        // Strip the split-view phrasing and any open/action verbs, then the
+        // usual filler — but keep the joining "and"/"with" so we can still
+        // split the two names apart afterwards.
+        let q = ' ' + t + ' ';
+        q = q
+          .replace(SPLIT_STRONG_RE, ' ')
+          .replace(SPLIT_LOOSE_RE, ' ')
+          .replace(ACTION_VERBS, ' ')
+          .replace(/\b(add|put|place|move|throw|stick|drop|set)\b/g, ' ')
+          .replace(/\b(in|on|into|to|as)\s+(a\s+|the\s+)?(new\s+)?(view|screen|window|tab|tabs)\b/g, ' ')
+          .replace(/\b(please|for me|right now|now|real quick|hey|ok|okay|bookmarks? buddy|can you|could you|would you|will you|i want to|i need to|i would like to|i'd like to|let's|lets)\b/g, ' ')
+          .replace(/\b(website|web site|the site|site|the page|page|the app|dot com|dot org|dot net)\b/g, ' ')
+          .replace(/\b(in|on|into|my|the|a|an|to|up|new|tab|tabs|window|view|screen|both|together|side)\b/g, ' ')
+          .replace(/\s+/g, ' ').trim();
+
+        const queries = q.split(SPLIT_JOIN_RE).map(s => s.trim()).filter(Boolean).slice(0, 2);
+
+        // A bare "split" with no explicit "split view"/"side by side" only
+        // counts as a real request when two names were actually joined —
+        // keeps casual talk that happens to contain "split" from firing.
+        if (!strong && queries.length < 2) return null;
+        return { kind: 'split', queries };
+      }
+
       function parseCommand(raw) {
         const t = ' ' + normalize(raw) + ' ';
         if (STOP_RE.test(t)) return { kind: 'stop' };
         if (HELP_RE.test(t)) return { kind: 'help' };
+
+        // Split view comes before add/open so "open Notion and Gmail in a
+        // split view" routes here instead of being read as a single open.
+        const split = parseSplit(t);
+        if (split) return split;
 
         // "add <company or url>" — save a new bookmark hands-free. Parsed off a
         // dot-preserving string so a spoken address survives, and checked
@@ -890,11 +939,13 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Or “add” a company to save it.'
+            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Say “split view” and two names to put them side by side. Or “add” a company to save it.'
             : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
-          announce('Say open and a bookmark name, or add and a company name.');
+          announce('Say open and a bookmark name, split view and two names, or add and a company name.');
           renderSoft(); return;
         }
+
+        if (cmd.kind === 'split') { handleSplit(cmd.queries); return; }
 
         if (!cmd.query) {
           if (cmd.kind === 'open') showToast('Say “open” and a bookmark name', 'mic');
@@ -1037,6 +1088,122 @@
           try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); } catch {}
         }
         if (opened) showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' from “' + g.label + '”', 'external-link');
+        render();
+      }
+
+      /* ---------------- split view ---------------- */
+
+      // Resolve one or two spoken names to bookmarks and open them side by
+      // side. Each name is fuzzy-matched like a normal "open"; a repeat of the
+      // same bookmark is de-duped so "split Gmail and Gmail" can't open one
+      // page twice.
+      function handleSplit(queries) {
+        if (!queries || !queries.length) {
+          showToast('Say two bookmarks, e.g. “split view Notion and Gmail”', 'mic');
+          announce('Tell me which bookmarks to open in a split view.');
+          return;
+        }
+
+        const found = [];
+        const misses = [];
+        for (const q of queries) {
+          const m = matchBookmark(q, 0.42);
+          if (m && !found.includes(m.bm)) found.push(m.bm);
+          else if (!m) misses.push(q);
+        }
+
+        if (!found.length) {
+          const label = queries.join('” or “');
+          recordAction({ type: 'notfound', query: queries.join(' and ') });
+          showToast('No bookmark matches “' + label + '”', 'search-x');
+          announce('No bookmarks found to open in a split view.');
+          renderSoft();
+          return;
+        }
+
+        openSplitView(found, { viaVoice: true });
+
+        // One half matched, the other didn't — open what we have and say so.
+        if (misses.length && found.length < 2) {
+          showToast('Opened “' + (found[0].name || hostCore(found[0].url)) + '” — couldn’t find “' + misses[0] + '”', 'search-x');
+        }
+      }
+
+      // Window features that place a pop-up on the left or right half of the
+      // screen, simulating the browser's split view from a plain web page. A
+      // single page takes the left half so there's room to add a second.
+      // NB: 'noopener'/'noreferrer' are deliberately NOT in the feature string
+      // — with either set, window.open() returns null even on success, which
+      // would defeat the open-vs-blocked detection below. We sever the opener
+      // link manually after the window is handed back instead.
+      function splitFeatures(count) {
+        const scr = window.screen || {};
+        const sw = scr.availWidth || scr.width || window.innerWidth || 1280;
+        const sh = scr.availHeight || scr.height || window.innerHeight || 800;
+        const sx = scr.availLeft || 0;
+        const sy = scr.availTop || 0;
+        const half = Math.floor(sw / 2);
+        const left = 'left=' + sx + ',top=' + sy + ',width=' + half + ',height=' + sh;
+        const right = 'left=' + (sx + half) + ',top=' + sy + ',width=' + (sw - half) + ',height=' + sh;
+        return count >= 2 ? [left, right] : [left];
+      }
+
+      // Open one positioned window and sever its opener link. Returns the
+      // window (truthy) on success, or null when the pop-up was blocked.
+      function openPlaced(url, feat) {
+        let win = null;
+        try { win = window.open(url, '_blank', feat); } catch { win = null; }
+        if (win) { try { win.opener = null; } catch {} }
+        return win;
+      }
+
+      // Open the resolved bookmarks as positioned pop-up windows. As with
+      // single and folder opens, a voice-triggered window.open() has no fresh
+      // user gesture, so the browser may block it; anything blocked is staged
+      // behind a one-tap "Open" banner (with its half-screen placement kept).
+      function openSplitView(bms, { viaVoice = false } = {}) {
+        const valid = bms.filter(bm => bm && ensureScheme(bm.url)).slice(0, 2);
+        if (!valid.length) { showToast('Those bookmarks have no address', 'triangle-alert'); return; }
+
+        highlightMatch(valid[0].id);
+        const feats = splitFeatures(valid.length);
+        const plan = valid.map((bm, i) => ({ bm, feat: feats[i] }));
+        const label = valid.map(b => b.name || hostCore(b.url)).join(' & ');
+
+        let opened = 0;
+        const blocked = [];
+        for (const p of plan) {
+          if (openPlaced(ensureScheme(p.bm.url), p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
+          else blocked.push(p);
+        }
+
+        if (blocked.length) {
+          VOICE.pendingSplit = { label, plan: blocked };
+          announce('A split view of ' + label + ' is ready — tap to confirm.');
+          if (!VOICE.popupHintShown) {
+            VOICE.popupHintShown = true;
+            showToast('Allow pop-ups for this site to open split views hands-free', 'mouse-pointer-click');
+          } else {
+            showToast('Tap to open ' + label + ' in a split view', 'mouse-pointer-click');
+          }
+        } else {
+          showToast('Opening ' + label + (valid.length > 1 ? ' in a split view' : ' in a new split view'), 'columns-2');
+          announce('Opening ' + label + ' in a split view.');
+          if (STATE.settings.speak && viaVoice) speak('Opening ' + label + ' in a split view');
+        }
+        renderSoft();
+      }
+
+      function openPendingSplit() {
+        const s = VOICE.pendingSplit;
+        if (!s) return;
+        VOICE.pendingSplit = null;
+        // Runs inside a real click, so the positioned pop-ups are allowed.
+        let opened = 0;
+        for (const p of s.plan) {
+          if (openPlaced(ensureScheme(p.bm.url), p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
+        }
+        if (opened) showToast('Opening ' + s.label + ' in a split view', 'columns-2');
         render();
       }
 
@@ -1374,6 +1541,14 @@
         return names.length ? names : ['“Open Salesforce”', '“Open Outreach”', '“Open Gmail”'];
       }
 
+      // A "split view A and B" example chip, built from the user's first two
+      // bookmarks (or sensible defaults) so it always reflects real names.
+      function splitExampleChip() {
+        const two = STATE.bookmarks.slice(0, 2).map(b => b.name || hostCore(b.url));
+        if (two.length < 2) two.splice(0, two.length, 'Salesforce', 'Gmail');
+        return `<span class="vp-chip">${escHtml('“Split view ' + two[0] + ' and ' + two[1] + '”')}</span>`;
+      }
+
       // The global launch shortcut, rendered as <kbd> keys. Kept in one place
       // so the voice panel and focus screen always show the same combo.
       function shortcutHint() {
@@ -1467,6 +1642,7 @@
           <div class="home home-springboard">
             ${VOICE.pendingOpen ? renderPending() : ''}
             ${VOICE.pendingGroup ? renderPendingGroup() : ''}
+            ${VOICE.pendingSplit ? renderPendingSplit() : ''}
             ${renderSpringboard()}
           </div>`;
       }
@@ -1680,6 +1856,22 @@
           </div>`;
       }
 
+      function renderPendingSplit() {
+        const s = VOICE.pendingSplit;
+        if (!s) return '';
+        const n = s.plan.length;
+        return `
+          <div class="pending" style="width:100%">
+            <div class="pending-ic"><i data-lucide="columns-2"></i></div>
+            <div class="pending-body">
+              <div class="pending-title">Ready to open ${escHtml(s.label)} in a split view</div>
+              <div class="pending-sub">Your browser blocked the pop-up${n > 1 ? 's' : ''}. Tap to open ${n > 1 ? 'them side by side' : 'it'}, or allow pop-ups for this site to open split views hands-free.</div>
+            </div>
+            <button class="btn-primary" data-action="open-pending-split"><i data-lucide="columns-2"></i> Open</button>
+            <button class="pending-x" data-action="dismiss-pending-split" title="Dismiss"><i data-lucide="x"></i></button>
+          </div>`;
+      }
+
       function renderRecent(isFocus) {
         const items = VOICE.recentActions;
         return `
@@ -1694,9 +1886,10 @@
       }
 
       function renderRecentItem(a) {
-        const icon = a.type === 'opened' ? 'external-link' : a.type === 'added' ? 'bookmark-plus' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
+        const icon = a.type === 'opened' ? 'external-link' : a.type === 'split' ? 'columns-2' : a.type === 'added' ? 'bookmark-plus' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
         let main;
         if (a.type === 'opened') main = 'Opened ' + escHtml(a.name);
+        else if (a.type === 'split') main = 'Split view ' + escHtml(a.name);
         else if (a.type === 'added') main = 'Added ' + escHtml(a.name);
         else if (a.type === 'blocked') main = 'Tap to open ' + escHtml(a.name);
         else if (a.type === 'notfound') main = 'No match for “' + escHtml(a.query) + '”';
@@ -1721,6 +1914,7 @@
             <div class="focus-inner">
               ${VOICE.pendingOpen ? `<div style="width:100%;max-width:480px;margin-bottom:18px">${renderPending()}</div>` : ''}
               ${VOICE.pendingGroup ? `<div style="width:100%;max-width:480px;margin-bottom:18px">${renderPendingGroup()}</div>` : ''}
+              ${VOICE.pendingSplit ? `<div style="width:100%;max-width:480px;margin-bottom:18px">${renderPendingSplit()}</div>` : ''}
               <div class="orb-wrap ${on ? 'live' : ''}">
                 <span class="orb-ring"></span><span class="orb-ring d"></span>
                 <button class="voice-orb ${on ? 'on' : 'off'}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} aria-label="${on ? 'Stop listening' : 'Start listening'}">
@@ -1728,12 +1922,13 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “split view” and two names to put them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
               <div class="vp-examples" style="justify-content:center">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
                 ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
+                ${splitExampleChip()}
                 <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
               <div class="focus-options">
@@ -1796,6 +1991,8 @@
             case 'dismiss-pending': VOICE.pendingOpen = null; render(); break;
             case 'open-pending-group': openPendingGroup(); break;
             case 'dismiss-pending-group': VOICE.pendingGroup = null; render(); break;
+            case 'open-pending-split': openPendingSplit(); break;
+            case 'dismiss-pending-split': VOICE.pendingSplit = null; render(); break;
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
