@@ -588,7 +588,7 @@
         pendingOpen: null,         // a bookmark a popup-block kept us from opening
         pendingGroup: null,        // { label, bms:[] } a folder a popup-block kept us from opening
         pendingSplit: null,        // { label, plan:[{bm,feat}] } a split view a popup-block kept us from opening
-        openWindows: [],           // { id, name, host, win, at } tabs we opened, so voice can close them again
+        openWindows: [],           // { id, name, host, win, severed, at } tabs we opened, so voice can close them again
         popupHintShown: false,
         lastMatchedId: null,
         matchClearId: null,
@@ -1208,20 +1208,48 @@
       /* ---------------- open-window registry ----------------
        * Every tab Bookmarks Buddy opens is remembered here (with its bookmark
        * identity) so a later "close" command can find and shut it. Windows the
-       * user closed on their own are pruned lazily before each use. */
+       * user closed on their own are pruned lazily before each use.
+       *
+       * Caveat (the reason "close YouTube" used to fail): a cross-origin page
+       * that ships a Cross-Origin-Opener-Policy header — YouTube, Google,
+       * GitHub and many others do — is moved into its OWN browsing-context
+       * group the moment it loads. That DISOWNS the handle we're holding:
+       * win.closed flips to true even though the tab is wide open. A naive
+       * prune on win.closed therefore throws away live tabs, leaving nothing
+       * to close. We keep such "severed" entries instead and still attempt the
+       * close on them. */
       function pruneWindows() {
-        VOICE.openWindows = VOICE.openWindows.filter(w => w.win && !w.win.closed);
+        const now = Date.now();
+        VOICE.openWindows = VOICE.openWindows.filter(w => {
+          if (!w.win) return false;
+          if (w.severed) return true;            // disowned-but-open (COOP) — keep it
+          if (now - w.at < SEVER_PROBE_MS) return true; // too soon to tell — COOP severs only after the load lands
+          try { return !w.win.closed; } catch { return true; }
+        });
       }
+      // A window the user really closed reports closed === true; so does a
+      // COOP-severed (but still open) one. We can't read the difference, but we
+      // can read the timing: severance happens within a beat of the page
+      // loading, while a deliberate close almost never does. So a handle that
+      // already reports closed this soon after opening was disowned, not shut.
+      const SEVER_PROBE_MS = 2500;
       function registerWindow(bm, win) {
         if (!win) return;
         pruneWindows();
-        VOICE.openWindows.push({
+        // Reopening the same bookmark supersedes its previous (now stale) handle.
+        VOICE.openWindows = VOICE.openWindows.filter(w => w.id !== bm.id);
+        const entry = {
           id: bm.id,
           name: bm.name || hostCore(bm.url),
           host: hostOf(bm.url),
           win,
+          severed: false,
           at: Date.now()
-        });
+        };
+        VOICE.openWindows.push(entry);
+        setTimeout(() => {
+          try { if (win.closed) entry.severed = true; } catch { entry.severed = true; }
+        }, SEVER_PROBE_MS);
       }
       // Open a placed window (see openPlaced) AND remember it for closing. Used
       // by every open path so the close command can reach any tab we launched.
