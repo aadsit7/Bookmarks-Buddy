@@ -259,6 +259,142 @@
 
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
+      /* ================= iPhone-style springboard ================= */
+      /* The bookmarks page is laid out like an iPhone home screen: a grid of
+         app icons (the website URLs) spread across swipeable pages, folders to
+         group them, and a pencil button (bottom-left) that enters "jiggle"
+         edit mode for dragging things around. */
+      .home-springboard { max-width: 1080px; margin: 0 auto; padding: 22px 22px 30px; }
+
+      .springboard {
+        position: relative;
+        display: flex; flex-direction: column;
+        min-height: min(70vh, 720px);
+        border-radius: 30px;
+        padding: 16px 12px 0;
+        overflow: hidden;
+        background:
+          radial-gradient(120% 80% at 18% 0%, rgba(127,227,255,0.32), transparent 60%),
+          radial-gradient(120% 90% at 100% 100%, rgba(3,114,255,0.5), transparent 55%),
+          linear-gradient(160deg, var(--navy), var(--navy-deep));
+        box-shadow: var(--shadow-hover), inset 0 1px 0 rgba(255,255,255,0.14);
+      }
+
+      .sb-viewport { flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+      .sb-track { display: flex; height: 100%; transition: transform .32s var(--ease); will-change: transform; }
+      .sb-page {
+        flex: 0 0 auto;
+        display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: min-content;
+        gap: 16px 6px; align-content: start; padding: 10px 12px 16px;
+      }
+      .sb-empty-page { grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.72); font-size: 13.5px; line-height: 1.6; padding: 48px 12px; }
+
+      .sb-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; user-select: none; }
+      .sb-tile, .sb-folder {
+        position: relative; width: 62px; height: 62px; border-radius: 16px; cursor: pointer;
+        display: grid; place-items: center; overflow: hidden;
+        background: rgba(255,255,255,0.97);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.24);
+        transition: transform .14s var(--ease), outline-color .14s;
+      }
+      .sb-tile:hover, .sb-folder:hover { transform: translateY(-2px); }
+      .sb-tile img { width: 38px; height: 38px; display: block; }
+      .sb-tile .sb-letter { font-size: 26px; font-weight: 800; color: var(--primary); }
+      .sb-tile.noimg::after { content: attr(data-letter); font-size: 26px; font-weight: 800; color: var(--primary); }
+      .sb-label {
+        font-size: 11.5px; font-weight: 600; color: #fff; text-align: center; line-height: 1.2;
+        max-width: 76px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      }
+
+      /* Folder tile — a frosted square holding a 3×3 preview of its apps */
+      .sb-folder { background: rgba(255,255,255,0.26); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: 6px; }
+      .sb-folder-grid { width: 100%; height: 100%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 3px; }
+      .sb-mini { border-radius: 5px; background: rgba(255,255,255,0.92); display: grid; place-items: center; overflow: hidden; }
+      .sb-mini img { width: 100%; height: 100%; object-fit: contain; padding: 1px; }
+
+      /* Jiggle / edit mode */
+      .sb-badge {
+        position: absolute; top: -7px; left: -7px; z-index: 3;
+        width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+        background: #fff; color: #1a1a1a; box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        display: grid; place-items: center;
+      }
+      .sb-badge svg { width: 13px; height: 13px; }
+      .springboard.editing .sb-cell { animation: jiggle .32s infinite; }
+      .springboard.editing .sb-cell:nth-child(even) { animation-delay: -.16s; }
+      .springboard.editing .sb-tile, .springboard.editing .sb-folder { cursor: grab; }
+      .sb-cell.dragging { opacity: .35; }
+      @keyframes jiggle { 0% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.3deg); } 100% { transform: rotate(-1.2deg); } }
+
+      /* Drop indicators while dragging */
+      .sb-cell.drop-before::before, .sb-cell.drop-after::after {
+        content: ''; position: absolute; top: 2px; bottom: 24px; width: 4px; border-radius: 3px;
+        background: var(--cyan-hi); box-shadow: 0 0 9px var(--cyan); z-index: 4;
+      }
+      .sb-cell.drop-before::before { left: -7px; }
+      .sb-cell.drop-after::after { right: -7px; }
+      .sb-cell.drop-folder .sb-tile, .sb-cell.drop-folder .sb-folder { outline: 3px solid var(--cyan-hi); transform: scale(1.09); }
+      .sb-page.drop-page { outline: 2px dashed rgba(255,255,255,0.45); outline-offset: -10px; border-radius: 18px; }
+
+      /* Page dots */
+      .sb-dots { display: flex; justify-content: center; gap: 8px; padding: 10px 0 4px; }
+      .sb-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(255,255,255,0.38); transition: background .15s, transform .15s; }
+      .sb-dot.active { background: #fff; transform: scale(1.18); }
+
+      /* Dock / footer with the pencil edit toggle (bottom-left) */
+      .sb-dock {
+        display: flex; align-items: center; gap: 12px; margin-top: auto;
+        padding: 12px 14px 16px; border-top: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.14);
+      }
+      .sb-edit-btn, .sb-add-btn {
+        width: 44px; height: 44px; border-radius: 14px; border: none; cursor: pointer; flex-shrink: 0;
+        display: grid; place-items: center; background: rgba(255,255,255,0.16); color: #fff;
+        transition: background .14s, transform .12s, color .14s;
+      }
+      .sb-edit-btn:hover, .sb-add-btn:hover { background: rgba(255,255,255,0.3); }
+      .sb-edit-btn:active, .sb-add-btn:active { transform: scale(.95); }
+      .sb-edit-btn svg, .sb-add-btn svg { width: 20px; height: 20px; }
+      .sb-edit-btn.on { background: #fff; color: var(--navy); }
+      .sb-dock-hint { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); text-align: center; }
+
+      /* Overlays: folder view + add/edit/delete modals */
+      .sb-overlay { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 20px; }
+      .sb-overlay-bg { position: absolute; inset: 0; background: rgba(22,31,91,0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+      .sb-folder-panel, .modal {
+        position: relative; z-index: 1; width: 100%; max-width: 440px;
+        background: #fff; border-radius: 20px; box-shadow: 0 30px 70px rgba(22,31,91,0.42);
+        animation: modalIn .2s var(--ease);
+      }
+      @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+
+      .sb-folder-panel { max-width: 520px; padding: 18px; }
+      .sb-folder-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+      .sb-folder-title { flex: 1; font-size: 18px; font-weight: 800; color: var(--navy-deep); }
+      .sb-folder-head input { flex: 1; }
+      .sb-folder-close { width: 36px; height: 36px; border-radius: 10px; border: none; cursor: pointer; flex-shrink: 0; background: var(--n100); color: var(--navy-deep); display: grid; place-items: center; }
+      .sb-folder-close:hover { background: var(--n200); }
+      .sb-folder-apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 8px; }
+      .sb-folder-apps .sb-tile { box-shadow: 0 4px 10px rgba(22,31,91,0.14); }
+      .sb-folder-apps .sb-label { color: var(--navy-deep); text-shadow: none; }
+      .sb-folder-apps .sb-badge { background: #dc2626; color: #fff; }
+
+      .modal { padding: 22px; }
+      .modal-title { font-size: 18px; font-weight: 800; color: var(--navy-deep); }
+      .modal-sub { font-size: 13px; color: var(--n500); margin-top: 6px; line-height: 1.5; }
+      .modal-fields { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+      .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+      .modal-actions .del-text { color: #dc2626; }
+      .btn-primary.danger { background: #dc2626; }
+      .btn-primary.danger:hover { background: #b91c1c; }
+      .modal-confirm { text-align: center; }
+      .modal-confirm .modal-actions { justify-content: center; }
+      .modal-ic-del { width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 12px; background: #fee2e2; color: #dc2626; display: grid; place-items: center; }
+      .modal-ic-del svg { width: 24px; height: 24px; }
+
+      /* Listen tab extras (carried over from the old voice panel) */
+      .focus-options { margin-top: 24px; width: 100%; max-width: 420px; padding-top: 16px; border-top: 1px solid var(--divider); }
+
       /* ================= Responsive ================= */
       @media (max-width: 900px) {
         .home-grid { grid-template-columns: 1fr; }
@@ -274,6 +410,10 @@
         .home { padding: 16px 14px 32px; }
         .focus-title { font-size: 22px; }
         .focus-transcript { font-size: 20px; }
+        .home-springboard { padding: 14px 12px 26px; }
+        .springboard { border-radius: 24px; min-height: 74vh; }
+        .sb-page { gap: 14px 4px; padding: 8px 6px 14px; }
+        .sb-dock-hint { display: none; }
       }
     </style>
   </head>
@@ -296,6 +436,11 @@
 
       const LS_BOOKMARKS = 'bookmarksBuddy.bookmarks.v1';
       const LS_SETTINGS  = 'bookmarksBuddy.settings.v1';
+      const LS_LAYOUT    = 'bookmarksBuddy.layout.v1';
+
+      // How many cells (apps or folders) fit on one springboard page before it
+      // spills onto the next — a 4×3 iPhone-style grid.
+      const PAGE_SIZE = 12;
 
       const STATE = {
         view: 'home',              // 'home' | 'focus'
@@ -306,8 +451,20 @@
         draftUrl: '',
         editDraftName: '',
         editDraftUrl: '',
-        settings: { speak: false } // optional spoken confirmation, off by default
+        settings: { speak: false }, // optional spoken confirmation, off by default
+        // iPhone-style home-screen layout. pages[] holds "cells", each either
+        // { type:'app', id } or { type:'folder', id, name, items:[{type:'app',id}] }.
+        // The flat STATE.bookmarks list stays the source of truth (voice uses
+        // it); the layout just arranges those same bookmarks into pages/folders.
+        layout: { pages: [] },
+        currentPage: 0,
+        editMode: false,           // "jiggle" mode for rearranging
+        openFolderId: null,        // folder whose overlay is open, if any
+        adding: false              // add-website modal open
       };
+
+      // Transient drag state for rearranging in edit mode.
+      const DRAG = { from: null, intent: null };
 
       const VOICE = {
         srSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
@@ -345,14 +502,117 @@
         } catch {}
       }
       function persistBookmarks() {
-        try { localStorage.setItem(LS_BOOKMARKS, JSON.stringify(STATE.bookmarks)); return true; }
+        try {
+          localStorage.setItem(LS_BOOKMARKS, JSON.stringify(STATE.bookmarks));
+          // Keep the springboard layout in step with the bookmark list (new
+          // ones get placed, deleted ones get pruned) and save it too.
+          syncLayout();
+          persistLayout();
+          return true;
+        }
         catch { return false; }
       }
       function persistSettings() {
         try { localStorage.setItem(LS_SETTINGS, JSON.stringify(STATE.settings)); } catch {}
       }
+      function loadLayout() {
+        try {
+          const l = JSON.parse(localStorage.getItem(LS_LAYOUT) || 'null');
+          if (l && Array.isArray(l.pages)) STATE.layout = l;
+        } catch {}
+      }
+      function persistLayout() {
+        try { localStorage.setItem(LS_LAYOUT, JSON.stringify(STATE.layout)); } catch {}
+      }
 
       function uid() { return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+      /* ================================================================
+       * Springboard layout — arrange bookmarks like apps on an iPhone
+       * home screen (pages + folders), kept reconciled with the flat
+       * STATE.bookmarks list.
+       * ================================================================ */
+      function pageArr(i) { return STATE.layout.pages[i]; }
+      function findFolderById(fid) {
+        for (const page of STATE.layout.pages)
+          for (const it of page) if (it.type === 'folder' && it.id === fid) return it;
+        return null;
+      }
+      function asApp(item) { return { type: 'app', id: item.id }; }
+      function makeFolder(appA, appB) {
+        return { type: 'folder', id: 'f' + uid(), name: 'Folder', items: [asApp(appA), asApp(appB)] };
+      }
+      function clampCurrentPage() {
+        const n = Math.max(1, STATE.layout.pages.length);
+        STATE.currentPage = Math.min(Math.max(0, STATE.currentPage), n - 1);
+      }
+      // Append an app to the last page, opening a fresh page when it's full.
+      function addAppToLayout(id) {
+        let last = STATE.layout.pages[STATE.layout.pages.length - 1];
+        if (!last || last.length >= PAGE_SIZE) { last = []; STATE.layout.pages.push(last); }
+        last.push({ type: 'app', id });
+      }
+      // Spill any over-full page onto the next so no page exceeds PAGE_SIZE.
+      function reflowPages() {
+        const pages = STATE.layout.pages;
+        for (let i = 0; i < pages.length; i++) {
+          while (pages[i].length > PAGE_SIZE) {
+            const overflow = pages[i].pop();
+            if (!pages[i + 1]) pages[i + 1] = [];
+            pages[i + 1].unshift(overflow);
+          }
+        }
+        while (pages.length > 1 && pages[pages.length - 1].length === 0) pages.pop();
+      }
+      // Tidy folders (drop missing apps, dissolve folders left with <2 apps),
+      // remove empty pages, reflow, and close a folder overlay that vanished.
+      function normalizeLayout() {
+        const valid = new Set(STATE.bookmarks.map(b => b.id));
+        for (const page of STATE.layout.pages) {
+          for (let i = page.length - 1; i >= 0; i--) {
+            const it = page[i];
+            if (it.type === 'folder') {
+              it.items = it.items.filter(a => valid.has(a.id));
+              if (it.items.length === 0) page.splice(i, 1);
+              else if (it.items.length === 1) page[i] = { type: 'app', id: it.items[0].id };
+            }
+          }
+        }
+        STATE.layout.pages = STATE.layout.pages.filter(p => p.length > 0);
+        if (!STATE.layout.pages.length) STATE.layout.pages.push([]);
+        reflowPages();
+        clampCurrentPage();
+        if (STATE.openFolderId && !findFolderById(STATE.openFolderId)) STATE.openFolderId = null;
+      }
+      // Reconcile the layout with the bookmark list: drop stale app cells, add
+      // any bookmark that isn't placed yet, then normalize.
+      function syncLayout() {
+        if (!STATE.layout || !Array.isArray(STATE.layout.pages)) STATE.layout = { pages: [] };
+        const valid = new Set(STATE.bookmarks.map(b => b.id));
+        for (const page of STATE.layout.pages) {
+          for (let i = page.length - 1; i >= 0; i--) {
+            const it = page[i];
+            if (it.type === 'app' && !valid.has(it.id)) page.splice(i, 1);
+          }
+        }
+        normalizeLayout();
+        const present = new Set();
+        for (const page of STATE.layout.pages) for (const it of page) {
+          if (it.type === 'app') present.add(it.id);
+          else if (it.type === 'folder') it.items.forEach(a => present.add(a.id));
+        }
+        for (const b of STATE.bookmarks) if (!present.has(b.id)) addAppToLayout(b.id);
+        reflowPages();
+        clampCurrentPage();
+      }
+      function moveAppOutOfFolder(fid, id) {
+        const f = findFolderById(fid);
+        if (!f) return;
+        const idx = f.items.findIndex(a => a.id === id);
+        if (idx < 0) return;
+        f.items.splice(idx, 1);
+        addAppToLayout(id);
+      }
 
       /* ---------------- escaping ---------------- */
       function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -913,7 +1173,9 @@
       // a full re-render (which would steal focus from the add-bookmark form).
       function patchTranscript(text) {
         const nodes = [document.getElementById('live-transcript'), document.getElementById('focus-transcript')].filter(Boolean);
-        if (!nodes.length) return false;
+        // No transcript on screen (e.g. the springboard home) — treat as handled
+        // so live interim words don't force a full springboard re-render.
+        if (!nodes.length) return true;
         nodes.forEach(n => {
           if (text) n.innerHTML = escHtml(text) + '<span class="caret"></span>';
           else n.innerHTML = transcriptResting(n.id === 'focus-transcript');
@@ -939,9 +1201,10 @@
         STATE.bookmarks.push({ id: uid(), name, url });
         persistBookmarks();
         STATE.draftName = ''; STATE.draftUrl = '';
+        STATE.adding = false;
+        STATE.currentPage = STATE.layout.pages.length - 1; // show where it landed
         showToast('Added “' + name + '”', 'check');
         render();
-        const el = document.getElementById('bm-name'); if (el) el.focus();
       }
 
       function saveBookmarks() {
@@ -1028,6 +1291,7 @@
               ${STATE.view === 'focus' ? renderFocus() : renderHome()}
             </div>
           </div>
+          ${renderOverlays()}
           ${renderToast()}
         `;
         const page = document.querySelector('.page'); if (page) page.scrollTop = scroll;
@@ -1086,149 +1350,192 @@
           </header>`;
       }
 
-      /* ---------------- home ---------------- */
+      /* ---------------- home: iPhone-style springboard ---------------- */
       function renderHome() {
         return `
-          <div class="home">
-            <div class="home-grid">
-              ${renderBookmarksPanel()}
-              ${renderVoicePanel()}
+          <div class="home home-springboard">
+            ${VOICE.pendingOpen ? renderPending() : ''}
+            ${renderSpringboard()}
+          </div>`;
+      }
+
+      function renderSpringboard() {
+        const pages = STATE.layout.pages.length ? STATE.layout.pages : [[]];
+        clampCurrentPage();
+        const edit = STATE.editMode;
+        const track = pages.map((page, pi) =>
+          `<div class="sb-page" data-sb-page="${pi}" style="width:${100 / pages.length}%">${
+            page.length ? page.map((item, idx) => renderSbCell(item, pi, idx)).join('')
+                        : `<div class="sb-empty-page">No apps here yet.<br>Tap the <b>+</b> below to add a website.</div>`
+          }</div>`).join('');
+
+        const dots = pages.length > 1 ? `
+          <div class="sb-dots">
+            ${pages.map((_, i) => `<button class="sb-dot ${i === STATE.currentPage ? 'active' : ''}" data-action="goto-page" data-page="${i}" data-dot="${i}" aria-label="Page ${i + 1}"></button>`).join('')}
+          </div>` : '';
+
+        return `
+          <div class="springboard ${edit ? 'editing' : ''}">
+            <div class="sb-viewport" id="sb-viewport">
+              <div class="sb-track" id="sb-track" style="width:${pages.length * 100}%; transform:translateX(-${STATE.currentPage * (100 / pages.length)}%)">
+                ${track}
+              </div>
+            </div>
+            ${dots}
+            <div class="sb-dock">
+              <button class="sb-edit-btn ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
+                <i data-lucide="${edit ? 'check' : 'pencil'}"></i>
+              </button>
+              <div class="sb-dock-hint">${edit ? 'Drag to move · drop one app on another to make a folder' : ''}</div>
+              <button class="sb-add-btn" data-action="add-app" title="Add a website" aria-label="Add a website"><i data-lucide="plus"></i></button>
             </div>
           </div>`;
       }
 
-      function renderBookmarksPanel() {
-        const list = STATE.bookmarks;
+      function renderSbCell(item, pi, idx) {
+        return item.type === 'folder' ? renderFolderCell(item, pi, idx) : renderAppCell(item, pi, idx);
+      }
+
+      // The fallback initial — strictly alphanumeric since it's interpolated
+      // into an inline onerror handler, so no quotes/markup can leak in.
+      function appLetter(bm) {
+        return ((bm.name || hostCore(bm.url) || '?').replace(/[^a-z0-9]/ig, '').charAt(0) || '?').toUpperCase();
+      }
+
+      function renderAppCell(item, pi, idx) {
+        const bm = STATE.bookmarks.find(b => b.id === item.id);
+        if (!bm) return '';
+        const edit = STATE.editMode;
+        const fav = faviconFor(bm.url);
+        const letter = appLetter(bm);
+        const tileInner = fav
+          ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove();this.parentNode.classList.add('noimg');this.parentNode.setAttribute('data-letter','${escAttr(letter)}')">`
+          : `<span class="sb-letter">${escHtml(letter)}</span>`;
         return `
-          <section class="panel">
-            <div class="panel-head">
-              <div class="panel-head-ic"><i data-lucide="bookmark-plus"></i></div>
-              <div class="panel-titles">
-                <div class="panel-title">Your bookmarks</div>
-                <div class="panel-sub">Add the sites you open every day. Saved on this computer only.</div>
-              </div>
+          <div class="sb-cell" data-sb="app" data-page="${pi}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
+            ${edit ? `<button class="sb-badge" data-action="confirm-delete" data-id="${escAttr(bm.id)}" title="Delete" aria-label="Delete ${escAttr(bm.name)}"><i data-lucide="x"></i></button>` : ''}
+            <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
+            <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
+          </div>`;
+      }
+
+      function renderFolderCell(folder, pi, idx) {
+        const edit = STATE.editMode;
+        const preview = folder.items.slice(0, 9).map(a => {
+          const bm = STATE.bookmarks.find(b => b.id === a.id);
+          const fav = bm ? faviconFor(bm.url) : '';
+          return `<span class="sb-mini">${fav ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove()">` : ''}</span>`;
+        }).join('');
+        return `
+          <div class="sb-cell" data-sb="folder" data-page="${pi}" data-index="${idx}" data-fid="${escAttr(folder.id)}" draggable="${edit ? 'true' : 'false'}">
+            <div class="sb-folder" data-action="open-folder" data-fid="${escAttr(folder.id)}" title="${escAttr(folder.name)}">
+              <div class="sb-folder-grid">${preview}</div>
             </div>
-            <div class="panel-body">
-              <div class="bm-add">
+            <div class="sb-label">${escHtml(folder.name)}</div>
+          </div>`;
+      }
+
+      /* ---------------- overlays: folder view + modals ---------------- */
+      function renderOverlays() {
+        return renderFolderOverlay() + renderEditModal() + renderAddModal() + renderConfirmModal();
+      }
+
+      function renderFolderOverlay() {
+        if (!STATE.openFolderId) return '';
+        const folder = findFolderById(STATE.openFolderId);
+        if (!folder) return '';
+        const edit = STATE.editMode;
+        const apps = folder.items.map((a, idx) => {
+          const bm = STATE.bookmarks.find(b => b.id === a.id);
+          if (!bm) return '';
+          const fav = faviconFor(bm.url);
+          const letter = appLetter(bm);
+          const tileInner = fav
+            ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove();this.parentNode.classList.add('noimg');this.parentNode.setAttribute('data-letter','${escAttr(letter)}')">`
+            : `<span class="sb-letter">${escHtml(letter)}</span>`;
+          return `
+            <div class="sb-cell" data-sb="fapp" data-fid="${escAttr(folder.id)}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
+              ${edit ? `<button class="sb-badge" data-action="remove-from-folder" data-fid="${escAttr(folder.id)}" data-id="${escAttr(bm.id)}" title="Move out of folder" aria-label="Move ${escAttr(bm.name)} out of folder"><i data-lucide="x"></i></button>` : ''}
+              <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
+              <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
+            </div>`;
+        }).join('');
+        return `
+          <div class="sb-overlay">
+            <div class="sb-overlay-bg" data-action="close-folder"></div>
+            <div class="sb-folder-panel">
+              <div class="sb-folder-head">
+                ${edit
+                  ? `<input type="text" id="folder-name" data-folder-name placeholder="Folder name" value="${escAttr(folder.name)}" autocomplete="off">`
+                  : `<div class="sb-folder-title">${escHtml(folder.name)}</div>`}
+                <button class="sb-folder-close" data-action="close-folder" aria-label="Close folder"><i data-lucide="x"></i></button>
+              </div>
+              <div class="sb-folder-apps" data-folder-apps="${escAttr(folder.id)}">${apps}</div>
+            </div>
+          </div>`;
+      }
+
+      function renderAddModal() {
+        if (!STATE.adding) return '';
+        return `
+          <div class="sb-overlay">
+            <div class="sb-overlay-bg" data-action="close-add"></div>
+            <div class="modal">
+              <div class="modal-title">Add a website</div>
+              <div class="modal-sub">The name is what you’ll say out loud to open it by voice.</div>
+              <div class="modal-fields">
                 <input type="text" id="bm-name" placeholder="Name (e.g. Salesforce)" value="${escAttr(STATE.draftName)}" autocomplete="off">
                 <input type="text" id="bm-url" placeholder="Web address (salesforce.com)" value="${escAttr(STATE.draftUrl)}" autocomplete="off">
+              </div>
+              <div class="modal-actions">
+                <span style="flex:1"></span>
+                <button class="btn-outline" data-action="close-add">Cancel</button>
                 <button class="btn-primary" data-action="add-bookmark"><i data-lucide="plus"></i> Add</button>
               </div>
-              <div class="bm-add-hint"><i data-lucide="info"></i> Tip: the name is what you’ll say out loud to open it.</div>
-
-              <div class="bm-divider">
-                <span class="bm-count">${list.length} saved</span>
-              </div>
-
-              ${list.length ? `<div class="bm-list">${list.map(renderBookmarkItem).join('')}</div>` : `
-                <div class="bm-empty">
-                  <i data-lucide="bookmark"></i>
-                  <p>No bookmarks yet.<br>Add one above to get started.</p>
-                </div>`}
-
-              <div class="save-row">
-                <button class="btn-primary" data-action="save-bookmarks"><i data-lucide="hard-drive-download"></i> Save</button>
-                <span class="save-status"><i data-lucide="shield-check"></i> Cached locally — nothing leaves your browser</span>
-              </div>
-            </div>
-          </section>`;
-      }
-
-      function renderBookmarkItem(bm) {
-        if (STATE.editingId === bm.id) {
-          return `
-            <div class="bm-item">
-              <div class="bm-edit">
-                <input type="text" id="edit-name-${escAttr(bm.id)}" data-edit="name" placeholder="Name" value="${escAttr(STATE.editDraftName)}" autocomplete="off">
-                <input type="text" id="edit-url-${escAttr(bm.id)}" data-edit="url" placeholder="Web address" value="${escAttr(STATE.editDraftUrl)}" autocomplete="off">
-              </div>
-              <div class="bm-actions">
-                <button class="open" data-action="save-edit" data-id="${escAttr(bm.id)}" title="Save"><i data-lucide="check"></i></button>
-                <button data-action="cancel-edit" data-id="${escAttr(bm.id)}" title="Cancel"><i data-lucide="x"></i></button>
-              </div>
-            </div>`;
-        }
-        if (STATE.confirmDeleteId === bm.id) {
-          return `
-            <div class="bm-item">
-              <div class="bm-confirm">
-                <span>Delete “${escHtml(bm.name)}”?</span>
-                <button class="yes" data-action="delete-bookmark" data-id="${escAttr(bm.id)}">Delete</button>
-                <button class="btn-ghost" data-action="cancel-delete" data-id="${escAttr(bm.id)}">Cancel</button>
-              </div>
-            </div>`;
-        }
-        const fav = faviconFor(bm.url);
-        // Keep the fallback initial strictly alphanumeric — it's interpolated
-        // into an inline onerror handler, so no quotes/markup can leak in.
-        const letter = ((bm.name || hostCore(bm.url) || '?').replace(/[^a-z0-9]/ig, '').charAt(0) || '?').toUpperCase();
-        const matched = VOICE.lastMatchedId === bm.id ? ' matched' : '';
-        return `
-          <div class="bm-item${matched}">
-            <div class="bm-fav">${fav ? `<img src="${escAttr(fav)}" alt="" onerror="this.style.display='none';this.parentNode.textContent='${escAttr(letter)}'">` : escHtml(letter)}</div>
-            <div class="bm-body" data-action="open-bookmark" data-id="${escAttr(bm.id)}" title="Open ${escAttr(bm.name)}">
-              <div class="bm-name">${escHtml(bm.name)}</div>
-              <div class="bm-url">${escHtml(hostOf(bm.url) || bm.url)}</div>
-            </div>
-            <div class="bm-actions">
-              <button class="open" data-action="open-bookmark" data-id="${escAttr(bm.id)}" title="Open in new tab"><i data-lucide="external-link"></i></button>
-              <button data-action="edit-bookmark" data-id="${escAttr(bm.id)}" title="Edit"><i data-lucide="pencil"></i></button>
-              <button class="del" data-action="confirm-delete" data-id="${escAttr(bm.id)}" title="Delete"><i data-lucide="trash-2"></i></button>
             </div>
           </div>`;
       }
 
-      function renderVoicePanel() {
-        const sr = VOICE.srSupported;
-        const on = VOICE.listenOn;
-        const orbCls = on ? 'on' : 'off';
-        const icon = on ? 'mic' : 'mic';
-        const interim = VOICE.interimText;
+      function renderEditModal() {
+        if (!STATE.editingId) return '';
+        const bm = STATE.bookmarks.find(b => b.id === STATE.editingId);
+        if (!bm) return '';
         return `
-          <section class="panel">
-            <div class="panel-head">
-              <div class="panel-head-ic cyan"><i data-lucide="audio-lines"></i></div>
-              <div class="panel-titles">
-                <div class="panel-title">Voice assistant</div>
-                <div class="panel-sub">Turn it on, then say what to open — or “add” a company to save it. It keeps listening while you work.</div>
+          <div class="sb-overlay">
+            <div class="sb-overlay-bg" data-action="cancel-edit"></div>
+            <div class="modal">
+              <div class="modal-title">Edit website</div>
+              <div class="modal-fields">
+                <input type="text" id="edit-name" data-edit="name" placeholder="Name" value="${escAttr(STATE.editDraftName)}" autocomplete="off">
+                <input type="text" id="edit-url" data-edit="url" placeholder="Web address" value="${escAttr(STATE.editDraftUrl)}" autocomplete="off">
+              </div>
+              <div class="modal-actions">
+                <button class="btn-ghost del-text" data-action="confirm-delete" data-id="${escAttr(bm.id)}"><i data-lucide="trash-2"></i> Delete</button>
+                <span style="flex:1"></span>
+                <button class="btn-outline" data-action="cancel-edit">Cancel</button>
+                <button class="btn-primary" data-action="save-edit" data-id="${escAttr(bm.id)}"><i data-lucide="check"></i> Save</button>
               </div>
             </div>
-            <div class="vp-body">
-              ${VOICE.pendingOpen ? renderPending() : ''}
-              <div class="orb-wrap ${on ? 'live' : ''}">
-                <span class="orb-ring"></span><span class="orb-ring d"></span>
-                <button class="voice-orb ${orbCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop' : 'Click to start listening (Ctrl+Alt+B)'}" aria-label="${on ? 'Stop listening' : 'Start listening'}">
-                  <i data-lucide="${icon}"></i>
-                </button>
+          </div>`;
+      }
+
+      function renderConfirmModal() {
+        if (!STATE.confirmDeleteId) return '';
+        const bm = STATE.bookmarks.find(b => b.id === STATE.confirmDeleteId);
+        if (!bm) return '';
+        return `
+          <div class="sb-overlay">
+            <div class="sb-overlay-bg" data-action="cancel-delete"></div>
+            <div class="modal modal-confirm">
+              <div class="modal-ic-del"><i data-lucide="trash-2"></i></div>
+              <div class="modal-title">Delete “${escHtml(bm.name)}”?</div>
+              <div class="modal-sub">This removes it from your bookmarks. You can always add it again.</div>
+              <div class="modal-actions">
+                <button class="btn-outline" data-action="cancel-delete">Cancel</button>
+                <button class="btn-primary danger" data-action="delete-bookmark" data-id="${escAttr(bm.id)}">Delete</button>
               </div>
-
-              <div class="vp-status ${on ? 'on' : ''}">
-                <span class="st-dot"></span>
-                ${!sr ? 'Voice needs Chrome or Edge' : (on ? 'Listening for commands' : 'Off — tap to start')}
-              </div>
-
-              <div class="vp-transcript ${interim ? '' : 'muted'}" id="live-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(false)}</div>
-
-              <div class="vp-examples">
-                ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
-                <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
-              </div>
-
-              ${sr ? `<div class="vp-shortcut">${shortcutHint()}</div>` : ''}
-
-              <div class="vp-options">
-                <div class="opt-row">
-                  <div class="opt-text">
-                    <div class="opt-title">Speak confirmations</div>
-                    <div class="opt-sub">Say “Opening Salesforce” out loud when it acts. Off keeps it mic-only.</div>
-                  </div>
-                  <span class="switch ${STATE.settings.speak ? 'on' : ''}" role="switch" tabindex="0" aria-checked="${STATE.settings.speak}" data-action="toggle-speak" aria-label="Speak confirmations"></span>
-                </div>
-              </div>
-
-              ${renderRecent(false)}
             </div>
-          </section>`;
+          </div>`;
       }
 
       function renderPending() {
@@ -1295,6 +1602,19 @@
               <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name, or “add” a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
+              <div class="vp-examples" style="justify-content:center">
+                ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
+                <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
+              </div>
+              <div class="focus-options">
+                <div class="opt-row">
+                  <div class="opt-text">
+                    <div class="opt-title">Speak confirmations</div>
+                    <div class="opt-sub">Say “Opening Salesforce” out loud when it acts. Off keeps it mic-only.</div>
+                  </div>
+                  <span class="switch ${STATE.settings.speak ? 'on' : ''}" role="switch" tabindex="0" aria-checked="${STATE.settings.speak}" data-action="toggle-speak" aria-label="Speak confirmations"></span>
+                </div>
+              </div>
               <div class="focus-recent">${renderRecent(true)}</div>
             </div>
           </div>`;
@@ -1327,6 +1647,7 @@
           if (!target) return;
           const action = target.getAttribute('data-action');
           const id = target.getAttribute('data-id');
+          const fid = target.getAttribute('data-fid');
           switch (action) {
             case 'noop': break;
             case 'go-home': STATE.view = 'home'; render(); break;
@@ -1338,13 +1659,21 @@
             case 'edit-bookmark': startEdit(id); break;
             case 'save-edit': saveEdit(id); break;
             case 'cancel-edit': cancelEdit(); break;
-            case 'confirm-delete': STATE.confirmDeleteId = id; STATE.editingId = null; render(); break;
+            case 'confirm-delete': STATE.confirmDeleteId = id; STATE.editingId = null; STATE.adding = false; render(); break;
             case 'cancel-delete': STATE.confirmDeleteId = null; render(); break;
             case 'delete-bookmark': deleteBookmark(id); break;
             case 'open-pending': openPending(); break;
             case 'dismiss-pending': VOICE.pendingOpen = null; render(); break;
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
+            // ----- springboard -----
+            case 'goto-page': gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0); break;
+            case 'toggle-edit': STATE.editMode = !STATE.editMode; if (!STATE.editMode) persistLayout(); render(); break;
+            case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; render(); break;
+            case 'close-add': STATE.adding = false; render(); break;
+            case 'open-folder': STATE.openFolderId = fid; render(); break;
+            case 'close-folder': STATE.openFolderId = null; persistLayout(); render(); break;
+            case 'remove-from-folder': moveAppOutOfFolder(fid, id); normalizeLayout(); persistLayout(); render(); break;
           }
         };
 
@@ -1377,7 +1706,185 @@
             else if (ev.key === 'Escape') { ev.preventDefault(); cancelEdit(); }
           };
         });
+
+        // Live folder rename (kept on the folder object as you type).
+        const fname = document.querySelector('[data-folder-name]');
+        if (fname) {
+          fname.oninput = (ev) => {
+            const folder = findFolderById(STATE.openFolderId);
+            if (folder) { folder.name = ev.target.value; persistLayout(); }
+          };
+        }
+
+        // Drag-and-drop rearranging (assignment, not addEventListener, so it
+        // doesn't stack up across re-renders).
+        app.ondragstart = onDragStart;
+        app.ondragover  = onDragOver;
+        app.ondragend   = onDragEnd;
+        app.ondrop      = onDrop;
+
+        // Touch swipe between pages (when not rearranging).
+        const vp = document.getElementById('sb-viewport');
+        if (vp) {
+          let sx = 0, sy = 0, tracking = false;
+          vp.ontouchstart = (e) => { if (STATE.editMode) return; const t = e.touches[0]; sx = t.clientX; sy = t.clientY; tracking = true; };
+          vp.ontouchend = (e) => {
+            if (!tracking) return; tracking = false;
+            const t = e.changedTouches[0];
+            const dx = t.clientX - sx, dy = t.clientY - sy;
+            if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) gotoPage(STATE.currentPage + (dx < 0 ? 1 : -1));
+          };
+        }
       }
+
+      /* ---------------- page navigation + drag-and-drop ---------------- */
+      // Switch pages by sliding the track directly — no full re-render, so an
+      // in-progress drag (whose source node would otherwise be torn down) keeps
+      // working and typing focus is never stolen.
+      function gotoPage(i) {
+        const n = Math.max(1, STATE.layout.pages.length);
+        STATE.currentPage = Math.min(Math.max(0, i), n - 1);
+        const track = document.getElementById('sb-track');
+        if (track) track.style.transform = `translateX(-${STATE.currentPage * (100 / n)}%)`;
+        document.querySelectorAll('.sb-dot').forEach((d, idx) => d.classList.toggle('active', idx === STATE.currentPage));
+      }
+
+      function readLoc(cell) {
+        const sb = cell.getAttribute('data-sb');
+        if (sb === 'fapp') return { kind: 'folder', fid: cell.getAttribute('data-fid'), index: +cell.getAttribute('data-index'), id: cell.getAttribute('data-id') };
+        if (sb === 'folder') return { kind: 'page', page: +cell.getAttribute('data-page'), index: +cell.getAttribute('data-index'), fid: cell.getAttribute('data-fid'), isFolder: true };
+        return { kind: 'page', page: +cell.getAttribute('data-page'), index: +cell.getAttribute('data-index'), id: cell.getAttribute('data-id') };
+      }
+
+      function clearDropMarkers() {
+        document.querySelectorAll('.drop-before, .drop-after, .drop-folder').forEach(n => n.classList.remove('drop-before', 'drop-after', 'drop-folder'));
+        document.querySelectorAll('.drop-page').forEach(n => n.classList.remove('drop-page'));
+      }
+      function cleanupDrag() {
+        clearDropMarkers();
+        document.querySelectorAll('.sb-cell.dragging').forEach(n => n.classList.remove('dragging'));
+        DRAG.from = null; DRAG.intent = null;
+      }
+
+      function onDragStart(e) {
+        const cell = e.target.closest('[data-sb]');
+        if (!cell || !STATE.editMode) { if (e.preventDefault) e.preventDefault(); return; }
+        DRAG.from = readLoc(cell);
+        DRAG.intent = null;
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', cell.getAttribute('data-id') || cell.getAttribute('data-fid') || 'x'); } catch {}
+        cell.classList.add('dragging');
+      }
+
+      function onDragOver(e) {
+        if (!DRAG.from) return;
+        // Hovering a page dot flips to that page so you can drop across pages.
+        const dot = e.target.closest('[data-dot]');
+        if (dot) { e.preventDefault(); const i = +dot.getAttribute('data-dot'); if (i !== STATE.currentPage) gotoPage(i); return; }
+
+        // An app (folder items are apps) can be dropped onto another app to make
+        // a folder, or into an existing folder; a folder can only be reordered.
+        const sourceIsApp = (DRAG.from.kind === 'folder') || (DRAG.from.kind === 'page' && !DRAG.from.isFolder);
+        const folderApps = e.target.closest('[data-folder-apps]');
+        const cell = e.target.closest('[data-sb="app"],[data-sb="folder"]');
+        const fappCell = e.target.closest('[data-sb="fapp"]');
+        const pageEl = e.target.closest('[data-sb-page]');
+
+        // Reordering inside an open folder.
+        if (folderApps) {
+          e.preventDefault(); clearDropMarkers();
+          const fid = folderApps.getAttribute('data-folder-apps');
+          if (fappCell) {
+            const r = fappCell.getBoundingClientRect();
+            const after = (e.clientX - r.left) > r.width / 2;
+            DRAG.intent = { kind: 'folder', fid, pos: after ? 'after' : 'before', index: +fappCell.getAttribute('data-index') };
+            fappCell.classList.add(after ? 'drop-after' : 'drop-before');
+          } else {
+            DRAG.intent = { kind: 'folder', fid, pos: 'append' };
+            folderApps.classList.add('drop-page');
+          }
+          return;
+        }
+
+        // Onto a cell in the springboard.
+        if (cell) {
+          e.preventDefault(); clearDropMarkers();
+          const sb = cell.getAttribute('data-sb');
+          const page = +cell.getAttribute('data-page');
+          const index = +cell.getAttribute('data-index');
+          const r = cell.getBoundingClientRect();
+          const fx = (e.clientX - r.left) / r.width;
+          if (sb === 'folder' && sourceIsApp && fx > 0.25 && fx < 0.75) {
+            DRAG.intent = { kind: 'intoFolder', fid: cell.getAttribute('data-fid') };
+            cell.classList.add('drop-folder');
+          } else if (sb === 'app' && sourceIsApp && fx > 0.3 && fx < 0.7) {
+            DRAG.intent = { kind: 'combine', page, index };
+            cell.classList.add('drop-folder');
+          } else {
+            const after = fx > 0.5;
+            DRAG.intent = { kind: 'page', page, pos: after ? 'after' : 'before', index };
+            cell.classList.add(after ? 'drop-after' : 'drop-before');
+          }
+          return;
+        }
+
+        // Onto empty space of a page → drop at the end.
+        if (pageEl) {
+          e.preventDefault(); clearDropMarkers();
+          DRAG.intent = { kind: 'page', page: +pageEl.getAttribute('data-sb-page'), pos: 'append' };
+          pageEl.classList.add('drop-page');
+        }
+      }
+
+      function getSourceRef(from) {
+        if (from.kind === 'page') { const arr = STATE.layout.pages[from.page]; return { arr, item: arr && arr[from.index] }; }
+        const folder = findFolderById(from.fid);
+        return folder ? { arr: folder.items, item: folder.items[from.index] } : { arr: null, item: null };
+      }
+
+      function applyDrag(from, intent) {
+        const src = getSourceRef(from);
+        const item = src.item;
+        if (!item || !src.arr) return;
+
+        // Resolve the target (container + reference cell) BEFORE mutating, then
+        // re-find positions by identity afterwards so index shifts don't bite.
+        let targetArr = null, refItem = null;
+        if (intent.kind === 'page') { targetArr = pageArr(intent.page); if (intent.pos !== 'append') refItem = targetArr[intent.index]; }
+        else if (intent.kind === 'combine') { targetArr = pageArr(intent.page); refItem = targetArr[intent.index]; }
+        else if (intent.kind === 'intoFolder') { refItem = findFolderById(intent.fid); }
+        else if (intent.kind === 'folder') { const f = findFolderById(intent.fid); targetArr = f && f.items; if (intent.pos !== 'append') refItem = targetArr[intent.index]; }
+        if (refItem === item) return; // dropped on itself
+
+        src.arr.splice(src.arr.indexOf(item), 1); // detach from source
+
+        if (intent.kind === 'page') {
+          if (!targetArr) return;
+          if (intent.pos === 'append') targetArr.push(item);
+          else { let ti = targetArr.indexOf(refItem); if (ti < 0) ti = targetArr.length; targetArr.splice(intent.pos === 'after' ? ti + 1 : ti, 0, item); }
+        } else if (intent.kind === 'combine') {
+          let ti = targetArr.indexOf(refItem);
+          if (ti < 0) { targetArr.push(item); return; }
+          targetArr.splice(ti, 1, makeFolder(refItem, item));
+        } else if (intent.kind === 'intoFolder') {
+          if (refItem) refItem.items.push(asApp(item));
+        } else if (intent.kind === 'folder') {
+          if (!targetArr) return;
+          if (intent.pos === 'append') targetArr.push(asApp(item));
+          else { let ti = targetArr.indexOf(refItem); if (ti < 0) ti = targetArr.length; targetArr.splice(intent.pos === 'after' ? ti + 1 : ti, 0, asApp(item)); }
+        }
+      }
+
+      function onDrop(e) {
+        if (!DRAG.from || !DRAG.intent) { cleanupDrag(); return; }
+        e.preventDefault();
+        applyDrag(DRAG.from, DRAG.intent);
+        cleanupDrag();
+        normalizeLayout();
+        persistLayout();
+        render();
+      }
+
+      function onDragEnd() { cleanupDrag(); }
 
       window.addEventListener('beforeunload', () => { persistBookmarks(); persistSettings(); });
 
@@ -1418,6 +1925,9 @@
        * Init
        * ================================================================ */
       loadData();
+      loadLayout();
+      syncLayout();
+      persistLayout();
       render();
 
       // Keep the "Recent" timestamps fresh without a heavy re-render.
