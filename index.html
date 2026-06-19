@@ -89,17 +89,6 @@
       .nav-tab:hover { color: #fff; }
       .nav-tab.active { background: #fff; color: var(--navy); }
 
-      .topbar-spacer { flex: 1; }
-
-      /* Header listening pill — global mic switch, visible on every screen */
-      .mic-pill { display: inline-flex; align-items: center; gap: 9px; border: 1.5px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.07); color: #fff; font-size: 12.5px; font-weight: 700; padding: 9px 16px 9px 14px; border-radius: 999px; cursor: pointer; transition: background 0.14s, border-color 0.14s, transform 0.12s; }
-      .mic-pill:hover { background: rgba(255,255,255,0.14); }
-      .mic-pill:active { transform: scale(0.98); }
-      .mic-pill svg { width: 16px; height: 16px; }
-      .mic-pill.on { background: #fff; color: var(--navy); border-color: #fff; }
-      .mic-pill.off .dot, .mic-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-blue); flex-shrink: 0; }
-      .mic-pill.on .dot { background: #10b981; animation: statusPulse 1.5s ease-out infinite; }
-      .mic-pill.disabled { opacity: 0.55; cursor: not-allowed; }
       @keyframes statusPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); } 100% { box-shadow: 0 0 0 7px rgba(16,185,129,0); } }
 
       .page { flex: 1; min-height: 0; overflow-y: auto; background: var(--n50); }
@@ -221,7 +210,6 @@
       .recent-ic.added { background: #ecfdf5; color: var(--green); }
       .recent-ic.blocked { background: #fffbeb; color: var(--amber); }
       .recent-ic.notfound { background: #fef2f2; color: #dc2626; }
-      .recent-ic.closed { background: #f1f5f9; color: #475569; }
       .recent-ic.info { background: var(--n100); color: var(--n600); }
       .recent-body { flex: 1; min-width: 0; }
       .recent-main { font-size: 13px; font-weight: 600; color: var(--navy-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -386,19 +374,20 @@
       .sb-arrow-next { right: 12px; }
       .sb-arrow.disabled { opacity: 0; pointer-events: none; }
 
-      /* Dock / footer with the pencil edit toggle (bottom-left) */
+      /* Springboard footer — the rearrange hint under the app grid */
       .sb-dock {
         display: flex; align-items: center; gap: 12px; margin-top: auto;
         padding: 12px 14px 16px; border-top: 1px solid var(--n200); background: rgba(255,255,255,0.45);
       }
-      .sb-edit-btn, .sb-add-btn {
+      /* Rearrange toggle — lives in the home action bar (see .home-edit) */
+      .sb-edit-btn {
         width: 44px; height: 44px; border-radius: 14px; border: none; cursor: pointer; flex-shrink: 0;
         display: grid; place-items: center; background: rgba(22,31,91,0.06); color: var(--navy-deep);
         transition: background .14s, transform .12s, color .14s;
       }
-      .sb-edit-btn:hover, .sb-add-btn:hover { background: rgba(22,31,91,0.12); }
-      .sb-edit-btn:active, .sb-add-btn:active { transform: scale(.95); }
-      .sb-edit-btn svg, .sb-add-btn svg { width: 20px; height: 20px; }
+      .sb-edit-btn:hover { background: rgba(22,31,91,0.12); }
+      .sb-edit-btn:active { transform: scale(.95); }
+      .sb-edit-btn svg { width: 20px; height: 20px; }
       .sb-edit-btn.on { background: var(--navy); color: #fff; }
       .sb-dock-hint { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--n500); text-align: center; }
 
@@ -484,15 +473,32 @@
       .vb-hints { display: flex; gap: 7px; flex-shrink: 0; position: relative; z-index: 1; }
       .vb-hint { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.94); background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 13px; white-space: nowrap; }
 
-      /* ================= Home toolbar (search) ================= */
-      .home-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+      /* ============ Home action bar (listening · edit · add) ============ */
+      .home-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+      .home-actions-spacer { flex: 1; }
+      .home-listen {
+        display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px;
+        border-radius: 999px; border: 1.5px solid var(--n200); background: #fff; color: var(--navy-deep);
+        font-size: 13px; font-weight: 700; cursor: pointer;
+        transition: background .14s, border-color .14s, color .14s, transform .12s;
+      }
+      .home-listen:hover { border-color: var(--n300); background: var(--n50); }
+      .home-listen:active { transform: scale(.98); }
+      .home-listen svg { width: 16px; height: 16px; }
+      .home-listen .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--n400); flex-shrink: 0; }
+      .home-listen.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+      .home-listen.on .dot { background: #10b981; animation: statusPulse 1.5s ease-out infinite; }
+      .home-listen.disabled { opacity: 0.55; cursor: not-allowed; }
+
+      /* ===================== Home search ===================== */
+      .home-search-row { display: flex; margin-bottom: 16px; }
       .home-search { flex: 1; position: relative; }
       .home-search .search-ic { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--n400); pointer-events: none; }
       .home-search input { padding-left: 42px; height: 46px; border-radius: 999px; }
       .home-search .clear-search { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: none; background: var(--n100); color: var(--n500); border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
       .home-search .clear-search:hover { background: var(--n200); color: var(--navy-deep); }
       .home-search .clear-search svg { width: 15px; height: 15px; }
-      .home-add-btn { flex-shrink: 0; min-height: 46px; }
+      .home-add-btn { flex-shrink: 0; min-height: 44px; }
 
       /* Search results */
       .search-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
@@ -526,10 +532,8 @@
       }
       @media (max-width: 640px) {
         .topbar { flex-wrap: wrap; padding: 8px 14px; gap: 10px; min-height: 0; }
-        .topbar-spacer { display: none; }
         .nav-tabs { order: 3; width: 100%; margin-left: 0; }
         .nav-tab { flex: 1; justify-content: center; }
-        .mic-pill { margin-left: auto; }
         .bm-add { grid-template-columns: 1fr; }
         .home { padding: 16px 14px 32px; }
         .focus-title { font-size: 22px; }
@@ -541,7 +545,8 @@
         .sb-dock-hint { display: none; }
         .vb-hints { display: none; }
         .vb-line { white-space: normal; }
-        .home-tools { flex-wrap: wrap; }
+        .home-actions { flex-wrap: wrap; }
+        .home-actions-spacer { display: none; }
         .home-add-btn { width: 100%; }
         .onboard-hero { padding: 32px 22px 30px; }
         .onboard-title { font-size: 23px; }
@@ -686,7 +691,7 @@
         pendingOpen: null,         // a bookmark a popup-block kept us from opening
         pendingGroup: null,        // { label, bms:[] } a folder a popup-block kept us from opening
         pendingSplit: null,        // { label, plan:[{bm,feat}] } a split view a popup-block kept us from opening
-        openWindows: [],           // { id, name, host, win, severed, at } tabs we opened, so voice can close them again
+        openWindows: [],           // { id, name, host, win, severed, at } tabs we opened, so voice can tile a split beside them
         popupHintShown: false,
         lastMatchedId: null,
         matchClearId: null,
@@ -1318,10 +1323,6 @@
       // adjective ("open my favorite site"), so it must not trigger an add.
       const ADD_VERBS = /\b(create a bookmark for|add a bookmark for|save a bookmark for|new bookmark for|add a bookmark|new bookmark|add to (my )?(bookmarks|favorites|favourites)|bookmark|add|save|remember)\b/;
       const STOP_RE = /\b(stop listening|stop the assistant|stop bookmarks buddy|quit listening|turn (it |yourself )?off|go to sleep|that's all|stop now)\b/;
-      // Verbs that mean "close a tab we opened". Longest phrases first so
-      // "close out of X" strips cleanly to the bare name. These never overlap
-      // the open/add verbs, so "close" is treated as an unambiguous command.
-      const CLOSE_VERBS = /\b(close out of|close out|close down|close|shut down|shut|dismiss|get rid of|exit out of|exit)\b/;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
       // Split view — open a page (or two pages) side by side, mirroring the
       // browser tab menu's "Add tab to new split view". The strong form names
@@ -1499,23 +1500,6 @@
         if (STOP_RE.test(t)) return { kind: 'stop' };
         if (HELP_RE.test(t)) return { kind: 'help' };
 
-        // "close <name>" / "close this" / "close everything" — shut a tab we
-        // opened. Checked before open/add/split since "close" is unambiguous.
-        if (CLOSE_VERBS.test(t)) {
-          const all = /\b(everything|all)\b/.test(t);
-          let q = ' ' + t.replace(CLOSE_VERBS, ' ') + ' ';
-          q = q
-            .replace(/\b(in|on)\s+(a\s+)?(new\s+)?(tab|window|browser)\b/g, ' ')
-            .replace(/\b(please|for me|right now|now|real quick|hey|ok|okay|bookmarks? buddy|can you|could you|would you|will you|i want to|i need to|i would like to|i'd like to|let's|lets)\b/g, ' ')
-            .replace(/\b(website|web site|the site|site|the page|page|the app|dot com|dot org|dot net)\b/g, ' ')
-            .replace(/\b(bookmark|bookmarks|book mark|book marks|favorite|favourite|favorites|favourites|fave|faves)\b/g, ' ')
-            .replace(/\b(out of|out|down|of)\b/g, ' ')
-            .replace(/\b(this|that|these|those|it|them|all|every|everything|current|currently|open|opened)\b/g, ' ')
-            .replace(/\b(my|the|a|an|to|up|new|tab|tabs|window|windows|view|views)\b/g, ' ')
-            .replace(/\s+/g, ' ').trim();
-          return { kind: 'close', query: q, all };
-        }
-
         // "Add to split view" comes first: attaching a site to a tab that's
         // already open ("add split screen with YouTube for the Wikipedia tab")
         // is distinct from opening a fresh split, and would otherwise be read
@@ -1566,13 +1550,11 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side, or “add split screen with YouTube for this tab” to add a site beside one that’s already open. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
+            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side, or “add split screen with YouTube for this tab” to add a site beside one that’s already open. Or “add” a company to save it.'
             : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
-          announce('Say open and one or more bookmarks or folders, split view and two names to tile them, add a site to a tab that is already open, close and a name to shut a tab, or add and a company name.');
+          announce('Say open and one or more bookmarks or folders, split view and two names to tile them, add a site to a tab that is already open, or add and a company name.');
           renderSoft(); return;
         }
-
-        if (cmd.kind === 'close') { handleClose(cmd); return; }
 
         if (cmd.kind === 'addsplit') { handleAddToSplit(cmd); return; }
 
@@ -1622,17 +1604,17 @@
 
       /* ---------------- open-window registry ----------------
        * Every tab Bookmarks Buddy opens is remembered here (with its bookmark
-       * identity) so a later "close" command can find and shut it. Windows the
-       * user closed on their own are pruned lazily before each use.
+       * identity) so a later "add to split view" can find that tab and tile a
+       * new pane beside it. Windows the user closed on their own are pruned
+       * lazily before each use.
        *
-       * Caveat (the reason "close YouTube" used to fail): a cross-origin page
-       * that ships a Cross-Origin-Opener-Policy header — YouTube, Google,
-       * GitHub and many others do — is moved into its OWN browsing-context
-       * group the moment it loads. That DISOWNS the handle we're holding:
-       * win.closed flips to true even though the tab is wide open. A naive
-       * prune on win.closed therefore throws away live tabs, leaving nothing
-       * to close. We keep such "severed" entries instead and still attempt the
-       * close on them. */
+       * Caveat: a cross-origin page that ships a Cross-Origin-Opener-Policy
+       * header — YouTube, Google, GitHub and many others do — is moved into
+       * its OWN browsing-context group the moment it loads. That DISOWNS the
+       * handle we're holding: win.closed flips to true even though the tab is
+       * wide open. A naive prune on win.closed therefore throws away live
+       * tabs. We keep such "severed" entries instead so the split-view anchor
+       * still resolves (its moveTo/resizeTo is then best-effort). */
       function pruneWindows() {
         const now = Date.now();
         VOICE.openWindows = VOICE.openWindows.filter(w => {
@@ -2033,69 +2015,6 @@
           announce('Adding ' + addLabel + ' to a split view with ' + (anchorLabel || 'your tab') + '.');
           if (STATE.settings.speak && viaVoice) speak('Adding ' + addLabel + ' to the split view');
         }
-        renderSoft();
-      }
-
-      /* ---------------- close (hands-free) ---------------- */
-
-      // Shut tabs Bookmarks Buddy opened. "close all/everything" closes them
-      // all; "close this/it" (no name) closes the most recently opened one; a
-      // spoken name is fuzzy-matched against the tabs we're still holding.
-      // window.close() only works on script-opened windows — exactly the ones
-      // in our registry — so user-opened tabs are never touched.
-      function handleClose(cmd) {
-        pruneWindows();
-        const live = VOICE.openWindows;
-        if (!live.length) {
-          recordAction({ type: 'info', text: 'No open tabs to close' });
-          showToast('No open tabs to close', 'info');
-          announce('There are no open tabs to close.');
-          if (STATE.settings.speak) speak('Nothing to close');
-          renderSoft();
-          return;
-        }
-
-        // "close all" / "close everything" — shut every tab we opened.
-        if (cmd.all && !cmd.query) {
-          const n = live.length;
-          for (const w of live.slice()) { try { w.win.close(); } catch {} }
-          VOICE.openWindows = [];
-          const label = n + ' tab' + (n > 1 ? 's' : '');
-          recordAction({ type: 'closed', name: label });
-          showToast('Closed ' + label, 'x');
-          announce('Closed ' + label + '.');
-          if (STATE.settings.speak) speak('Closed ' + label);
-          renderSoft();
-          return;
-        }
-
-        // No name ("close this" / "close it") — close the most recent tab.
-        if (!cmd.query) { closeEntry(live[live.length - 1], { viaVoice: true }); return; }
-
-        // A spoken name — fuzzy-match it against the tabs still open, scoring
-        // on each tab's bookmark name and host just like an "open" would.
-        let best = null;
-        for (const w of live) {
-          const score = scoreBookmark(cmd.query, { name: w.name, url: w.host });
-          if (score >= 0.42 && (!best || score > best.score)) best = { w, score };
-        }
-        if (best) { closeEntry(best.w, { viaVoice: true }); return; }
-
-        recordAction({ type: 'notfound', query: cmd.query });
-        showToast('No open tab matches “' + cmd.query + '”', 'search-x');
-        announce('No open tab found for ' + cmd.query);
-        renderSoft();
-      }
-
-      function closeEntry(entry, { viaVoice = false } = {}) {
-        if (!entry) return;
-        try { entry.win.close(); } catch {}
-        VOICE.openWindows = VOICE.openWindows.filter(w => w !== entry);
-        const label = entry.name;
-        recordAction({ type: 'closed', name: label });
-        showToast('Closed ' + label, 'x');
-        announce('Closed ' + label);
-        if (STATE.settings.speak && viaVoice) speak('Closed ' + label);
         renderSoft();
       }
 
@@ -2532,11 +2451,6 @@
       }
 
       function renderTopbar() {
-        const sr = VOICE.srSupported;
-        const on = VOICE.listenOn;
-        const pillCls = !sr ? 'disabled' : (on ? 'on' : 'off');
-        const pillLabel = !sr ? 'Voice needs Chrome' : (on ? 'Listening' : 'Start listening');
-        const pillIcon = on ? 'mic' : 'mic';
         return `
           <header class="topbar">
             <div class="brand">
@@ -2554,12 +2468,6 @@
                 <i data-lucide="radio"></i> Settings
               </button>
             </nav>
-            <div class="topbar-spacer"></div>
-            <button class="mic-pill ${pillCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (Ctrl+Alt+B)' : 'Click to start listening (Ctrl+Alt+B)'}">
-              <span class="dot"></span>
-              <i data-lucide="${pillIcon}"></i>
-              ${escHtml(pillLabel)}
-            </button>
           </header>`;
       }
 
@@ -2652,19 +2560,36 @@
         return chips.slice(0, 2);
       }
 
-      // Search + add toolbar, shown once a collection is big enough to need it.
+      // The home action bar — listening, rearrange, and add, lined up together
+      // just above the search so every control sits in one place. The search
+      // field itself only appears once a collection is big enough to need it.
       function renderHomeTools() {
-        if (STATE.bookmarks.length < 5) return '';
+        const sr = VOICE.srSupported;
+        const on = VOICE.listenOn;
+        const edit = STATE.editMode;
+        const listenCls = !sr ? 'disabled' : (on ? 'on' : 'off');
+        const listenLabel = !sr ? 'Voice needs Chrome' : (on ? 'Listening' : 'Start listening');
         const q = STATE.homeSearch;
+        const showSearch = STATE.bookmarks.length >= 5;
         return `
-          <div class="home-tools">
+          <div class="home-actions">
+            <button class="home-listen ${listenCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (Ctrl+Alt+B)' : 'Click to start listening (Ctrl+Alt+B)'}">
+              <span class="dot"></span><i data-lucide="mic"></i> ${escHtml(listenLabel)}
+            </button>
+            <button class="sb-edit-btn home-edit ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
+              <i data-lucide="${edit ? 'check' : 'pencil'}"></i>
+            </button>
+            <div class="home-actions-spacer"></div>
+            <button class="btn-primary home-add-btn" data-action="add-app"><i data-lucide="plus"></i> Add</button>
+          </div>
+          ${showSearch ? `
+          <div class="home-search-row">
             <div class="home-search">
               <i data-lucide="search" class="search-ic"></i>
               <input type="text" id="home-search" placeholder="Search your bookmarks…" value="${escAttr(q)}" autocomplete="off" spellcheck="false">
               ${q ? `<button class="clear-search" data-action="clear-search" aria-label="Clear search"><i data-lucide="x"></i></button>` : ''}
             </div>
-            <button class="btn-primary home-add-btn" data-action="add-app"><i data-lucide="plus"></i> Add</button>
-          </div>`;
+          </div>` : ''}`;
       }
 
       function renderSearchResults(q) {
@@ -2703,7 +2628,7 @@
         const track = pages.map((page, pi) =>
           `<div class="sb-page" data-sb-page="${pi}" style="width:${100 / pages.length}%">${
             page.length ? page.map((item, idx) => renderSbCell(item, pi, idx)).join('')
-                        : `<div class="sb-empty-page">No apps here yet.<br>Tap the <b>+</b> below to add a website.</div>`
+                        : `<div class="sb-empty-page">No apps here yet.<br>Tap <b>Add</b> up top to add a website.</div>`
           }</div>`).join('');
 
         // Dot strip — page indicators plus, while arranging, a "+" to add a
@@ -2729,11 +2654,7 @@
             </div>
             ${dots}
             <div class="sb-dock">
-              <button class="sb-edit-btn ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
-                <i data-lucide="${edit ? 'check' : 'pencil'}"></i>
-              </button>
-              <div class="sb-dock-hint">${edit ? 'Drag to move · drop onto another app to make a folder · drag out of a folder to pull it back · drag to an edge for a new page' : 'Tip: press and hold an app — or tap the pencil — to rearrange'}</div>
-              <button class="sb-add-btn" data-action="add-app" title="Add a website" aria-label="Add a website"><i data-lucide="plus"></i></button>
+              <div class="sb-dock-hint">${edit ? 'Drag to move · drop onto another app to make a folder · drag out of a folder to pull it back · drag to an edge for a new page' : 'Tip: press and hold an app — or tap the pencil up top — to rearrange'}</div>
             </div>
           </div>`;
       }
@@ -2958,12 +2879,11 @@
       }
 
       function renderRecentItem(a) {
-        const icon = a.type === 'opened' ? 'external-link' : a.type === 'split' ? 'columns-2' : a.type === 'added' ? 'bookmark-plus' : a.type === 'closed' ? 'x' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
+        const icon = a.type === 'opened' ? 'external-link' : a.type === 'split' ? 'columns-2' : a.type === 'added' ? 'bookmark-plus' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
         let main;
         if (a.type === 'opened') main = 'Opened ' + escHtml(a.name);
         else if (a.type === 'split') main = 'Split view ' + escHtml(a.name);
         else if (a.type === 'added') main = 'Added ' + escHtml(a.name);
-        else if (a.type === 'closed') main = 'Closed ' + escHtml(a.name);
         else if (a.type === 'blocked') main = 'Tap to open ' + escHtml(a.name);
         else if (a.type === 'notfound') main = 'No match for “' + escHtml(a.query) + '”';
         else main = escHtml(a.text || '');
@@ -2995,14 +2915,13 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “close” and a name (or “close this”) to shut a tab you opened. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
                 ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
                 ${splitExampleChip()}
-                ${STATE.bookmarks.length ? `<span class="vp-chip">${escHtml('“Close ' + firstSpokenName() + '”')}</span>` : ''}
                 <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
               <div class="focus-options">
