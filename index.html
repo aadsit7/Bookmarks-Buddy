@@ -221,6 +221,7 @@
       .recent-ic.added { background: #ecfdf5; color: var(--green); }
       .recent-ic.blocked { background: #fffbeb; color: var(--amber); }
       .recent-ic.notfound { background: #fef2f2; color: #dc2626; }
+      .recent-ic.closed { background: #f1f5f9; color: #475569; }
       .recent-ic.info { background: var(--n100); color: var(--n600); }
       .recent-body { flex: 1; min-width: 0; }
       .recent-main { font-size: 13px; font-weight: 600; color: var(--navy-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -587,6 +588,7 @@
         pendingOpen: null,         // a bookmark a popup-block kept us from opening
         pendingGroup: null,        // { label, bms:[] } a folder a popup-block kept us from opening
         pendingSplit: null,        // { label, plan:[{bm,feat}] } a split view a popup-block kept us from opening
+        openWindows: [],           // { id, name, host, win, at } tabs we opened, so voice can close them again
         popupHintShown: false,
         lastMatchedId: null,
         matchClearId: null,
@@ -909,6 +911,10 @@
       // adjective ("open my favorite site"), so it must not trigger an add.
       const ADD_VERBS = /\b(create a bookmark for|add a bookmark for|save a bookmark for|new bookmark for|add a bookmark|new bookmark|add to (my )?(bookmarks|favorites|favourites)|bookmark|add|save|remember)\b/;
       const STOP_RE = /\b(stop listening|stop the assistant|stop bookmarks buddy|quit listening|turn (it |yourself )?off|go to sleep|that's all|stop now)\b/;
+      // Verbs that mean "close a tab we opened". Longest phrases first so
+      // "close out of X" strips cleanly to the bare name. These never overlap
+      // the open/add verbs, so "close" is treated as an unambiguous command.
+      const CLOSE_VERBS = /\b(close out of|close out|close down|close|shut down|shut|dismiss|get rid of|exit out of|exit)\b/;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
       // Split view — open a page (or two pages) side by side, mirroring the
       // browser tab menu's "Add tab to new split view". The strong form names
@@ -1019,6 +1025,23 @@
         if (STOP_RE.test(t)) return { kind: 'stop' };
         if (HELP_RE.test(t)) return { kind: 'help' };
 
+        // "close <name>" / "close this" / "close everything" — shut a tab we
+        // opened. Checked before open/add/split since "close" is unambiguous.
+        if (CLOSE_VERBS.test(t)) {
+          const all = /\b(everything|all)\b/.test(t);
+          let q = ' ' + t.replace(CLOSE_VERBS, ' ') + ' ';
+          q = q
+            .replace(/\b(in|on)\s+(a\s+)?(new\s+)?(tab|window|browser)\b/g, ' ')
+            .replace(/\b(please|for me|right now|now|real quick|hey|ok|okay|bookmarks? buddy|can you|could you|would you|will you|i want to|i need to|i would like to|i'd like to|let's|lets)\b/g, ' ')
+            .replace(/\b(website|web site|the site|site|the page|page|the app|dot com|dot org|dot net)\b/g, ' ')
+            .replace(/\b(bookmark|bookmarks|book mark|book marks|favorite|favourite|favorites|favourites|fave|faves)\b/g, ' ')
+            .replace(/\b(out of|out|down|of)\b/g, ' ')
+            .replace(/\b(this|that|these|those|it|them|all|every|everything|current|currently|open|opened)\b/g, ' ')
+            .replace(/\b(my|the|a|an|to|up|new|tab|tabs|window|windows|view|views)\b/g, ' ')
+            .replace(/\s+/g, ' ').trim();
+          return { kind: 'close', query: q, all };
+        }
+
         // Split view comes before add/open so "open Notion and Gmail in a
         // split view" routes here instead of being read as a single open.
         const split = parseSplit(t);
@@ -1062,11 +1085,13 @@
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Say “split view” and two names to put them side by side. Or “add” a company to save it.'
+            ? 'Say “open” and a bookmark, e.g. ' + exampleNames()[0] + '. Say “split view” and two names to put them side by side. Say “close” and a name (or “close this”) to shut a tab. Or “add” a company to save it.'
             : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
-          announce('Say open and a bookmark name, split view and two names, or add and a company name.');
+          announce('Say open and a bookmark name, split view and two names, close and a name to shut a tab, or add and a company name.');
           renderSoft(); return;
         }
+
+        if (cmd.kind === 'close') { handleClose(cmd); return; }
 
         if (cmd.kind === 'split') { handleSplit(cmd.queries); return; }
 
@@ -1113,6 +1138,32 @@
         }
       }
 
+      /* ---------------- open-window registry ----------------
+       * Every tab Bookmarks Buddy opens is remembered here (with its bookmark
+       * identity) so a later "close" command can find and shut it. Windows the
+       * user closed on their own are pruned lazily before each use. */
+      function pruneWindows() {
+        VOICE.openWindows = VOICE.openWindows.filter(w => w.win && !w.win.closed);
+      }
+      function registerWindow(bm, win) {
+        if (!win) return;
+        pruneWindows();
+        VOICE.openWindows.push({
+          id: bm.id,
+          name: bm.name || hostCore(bm.url),
+          host: hostOf(bm.url),
+          win,
+          at: Date.now()
+        });
+      }
+      // Open a placed window (see openPlaced) AND remember it for closing. Used
+      // by every open path so the close command can reach any tab we launched.
+      function openAndTrack(bm, feat) {
+        const win = openPlaced(ensureScheme(bm.url), feat);
+        if (win) registerWindow(bm, win);
+        return win;
+      }
+
       // Open a bookmark in a new tab. A voice-triggered window.open() has no
       // fresh user gesture, so the browser may block it; on a block we surface
       // a one-tap banner and, the first time, a hint to allow pop-ups (after
@@ -1122,8 +1173,7 @@
         if (!url) { showToast('That bookmark has no address', 'triangle-alert'); return; }
 
         highlightMatch(bm.id);
-        let win = null;
-        try { win = window.open(url, '_blank', 'noopener'); } catch { win = null; }
+        const win = openAndTrack(bm);
 
         if (win) {
           VOICE.pendingOpen = null;
@@ -1152,7 +1202,7 @@
         if (!bm) return;
         VOICE.pendingOpen = null;
         // This runs inside a real click, so the pop-up is allowed.
-        try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); } catch {}
+        openAndTrack(bm);
         recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) });
         render();
       }
@@ -1176,8 +1226,7 @@
         let opened = 0;
         const blocked = [];
         for (const bm of bms) {
-          let win = null;
-          try { win = window.open(ensureScheme(bm.url), '_blank', 'noopener'); } catch { win = null; }
+          const win = openAndTrack(bm);
           if (win) { opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); }
           else blocked.push(bm);
         }
@@ -1208,7 +1257,7 @@
         // Runs inside a real click, so the whole batch of pop-ups is allowed.
         let opened = 0;
         for (const bm of g.bms) {
-          try { window.open(ensureScheme(bm.url), '_blank', 'noopener'); opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); } catch {}
+          if (openAndTrack(bm)) { opened++; recordAction({ type: 'opened', name: bm.name || hostCore(bm.url), url: ensureScheme(bm.url) }); }
         }
         if (opened) showToast('Opening ' + opened + ' site' + (opened > 1 ? 's' : '') + ' from “' + g.label + '”', 'external-link');
         render();
@@ -1296,7 +1345,7 @@
         let opened = 0;
         const blocked = [];
         for (const p of plan) {
-          if (openPlaced(ensureScheme(p.bm.url), p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
+          if (openAndTrack(p.bm, p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
           else blocked.push(p);
         }
 
@@ -1324,10 +1373,73 @@
         // Runs inside a real click, so the positioned pop-ups are allowed.
         let opened = 0;
         for (const p of s.plan) {
-          if (openPlaced(ensureScheme(p.bm.url), p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
+          if (openAndTrack(p.bm, p.feat)) { opened++; recordAction({ type: 'split', name: p.bm.name || hostCore(p.bm.url), url: ensureScheme(p.bm.url) }); }
         }
         if (opened) showToast('Opening ' + s.label + ' in a split view', 'columns-2');
         render();
+      }
+
+      /* ---------------- close (hands-free) ---------------- */
+
+      // Shut tabs Bookmarks Buddy opened. "close all/everything" closes them
+      // all; "close this/it" (no name) closes the most recently opened one; a
+      // spoken name is fuzzy-matched against the tabs we're still holding.
+      // window.close() only works on script-opened windows — exactly the ones
+      // in our registry — so user-opened tabs are never touched.
+      function handleClose(cmd) {
+        pruneWindows();
+        const live = VOICE.openWindows;
+        if (!live.length) {
+          recordAction({ type: 'info', text: 'No open tabs to close' });
+          showToast('No open tabs to close', 'info');
+          announce('There are no open tabs to close.');
+          if (STATE.settings.speak) speak('Nothing to close');
+          renderSoft();
+          return;
+        }
+
+        // "close all" / "close everything" — shut every tab we opened.
+        if (cmd.all && !cmd.query) {
+          const n = live.length;
+          for (const w of live.slice()) { try { w.win.close(); } catch {} }
+          VOICE.openWindows = [];
+          const label = n + ' tab' + (n > 1 ? 's' : '');
+          recordAction({ type: 'closed', name: label });
+          showToast('Closed ' + label, 'x');
+          announce('Closed ' + label + '.');
+          if (STATE.settings.speak) speak('Closed ' + label);
+          renderSoft();
+          return;
+        }
+
+        // No name ("close this" / "close it") — close the most recent tab.
+        if (!cmd.query) { closeEntry(live[live.length - 1], { viaVoice: true }); return; }
+
+        // A spoken name — fuzzy-match it against the tabs still open, scoring
+        // on each tab's bookmark name and host just like an "open" would.
+        let best = null;
+        for (const w of live) {
+          const score = scoreBookmark(cmd.query, { name: w.name, url: w.host });
+          if (score >= 0.42 && (!best || score > best.score)) best = { w, score };
+        }
+        if (best) { closeEntry(best.w, { viaVoice: true }); return; }
+
+        recordAction({ type: 'notfound', query: cmd.query });
+        showToast('No open tab matches “' + cmd.query + '”', 'search-x');
+        announce('No open tab found for ' + cmd.query);
+        renderSoft();
+      }
+
+      function closeEntry(entry, { viaVoice = false } = {}) {
+        if (!entry) return;
+        try { entry.win.close(); } catch {}
+        VOICE.openWindows = VOICE.openWindows.filter(w => w !== entry);
+        const label = entry.name;
+        recordAction({ type: 'closed', name: label });
+        showToast('Closed ' + label, 'x');
+        announce('Closed ' + label);
+        if (STATE.settings.speak && viaVoice) speak('Closed ' + label);
+        renderSoft();
       }
 
       // Add a bookmark from a spoken company name or URL. The user supplies
@@ -2179,11 +2291,12 @@
       }
 
       function renderRecentItem(a) {
-        const icon = a.type === 'opened' ? 'external-link' : a.type === 'split' ? 'columns-2' : a.type === 'added' ? 'bookmark-plus' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
+        const icon = a.type === 'opened' ? 'external-link' : a.type === 'split' ? 'columns-2' : a.type === 'added' ? 'bookmark-plus' : a.type === 'closed' ? 'x' : a.type === 'blocked' ? 'mouse-pointer-click' : a.type === 'notfound' ? 'search-x' : 'info';
         let main;
         if (a.type === 'opened') main = 'Opened ' + escHtml(a.name);
         else if (a.type === 'split') main = 'Split view ' + escHtml(a.name);
         else if (a.type === 'added') main = 'Added ' + escHtml(a.name);
+        else if (a.type === 'closed') main = 'Closed ' + escHtml(a.name);
         else if (a.type === 'blocked') main = 'Tap to open ' + escHtml(a.name);
         else if (a.type === 'notfound') main = 'No match for “' + escHtml(a.query) + '”';
         else main = escHtml(a.text || '');
@@ -2215,13 +2328,14 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “split view” and two names to put them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “split view” and two names to put them side by side. Say “close” and a name (or “close this”) to shut a tab you opened. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
                 ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
                 ${splitExampleChip()}
+                ${STATE.bookmarks.length ? `<span class="vp-chip">${escHtml('“Close ' + firstSpokenName() + '”')}</span>` : ''}
                 <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
               <div class="focus-options">
