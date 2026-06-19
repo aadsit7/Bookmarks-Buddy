@@ -2014,7 +2014,7 @@
                 <i data-lucide="layout-grid"></i> Bookmarks
               </button>
               <button class="nav-tab ${STATE.view === 'focus' ? 'active' : ''}" data-action="go-focus">
-                <i data-lucide="radio"></i> Listen
+                <i data-lucide="radio"></i> Settings
               </button>
             </nav>
             <div class="topbar-spacer"></div>
@@ -2042,7 +2042,6 @@
             ${VOICE.pendingOpen ? renderPending() : ''}
             ${VOICE.pendingGroup ? renderPendingGroup() : ''}
             ${VOICE.pendingSplit ? renderPendingSplit() : ''}
-            ${renderVoiceBar()}
             ${renderHomeTools()}
             ${q ? renderSearchResults(q) : renderSpringboard()}
           </div>`;
