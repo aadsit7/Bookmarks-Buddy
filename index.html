@@ -342,9 +342,31 @@
       .sb-page.drop-page { outline: 2px dashed rgba(255,255,255,0.45); outline-offset: -10px; border-radius: 18px; }
 
       /* Page dots */
-      .sb-dots { display: flex; justify-content: center; gap: 8px; padding: 10px 0 4px; }
+      .sb-dots { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 0 4px; }
       .sb-dot { width: 8px; height: 8px; border-radius: 50%; border: none; padding: 0; cursor: pointer; background: rgba(255,255,255,0.38); transition: background .15s, transform .15s; }
       .sb-dot.active { background: #fff; transform: scale(1.18); }
+      /* "Add a page" pill that sits at the end of the dot strip (edit mode) */
+      .sb-dot-add { width: 20px; height: 20px; border-radius: 50%; border: none; padding: 0; cursor: pointer; margin-left: 4px; display: grid; place-items: center; background: rgba(255,255,255,0.2); color: #fff; transition: background .15s, transform .12s; }
+      .sb-dot-add:hover { background: rgba(255,255,255,0.4); }
+      .sb-dot-add:active { transform: scale(.9); }
+      .sb-dot-add svg { width: 13px; height: 13px; }
+
+      /* Page arrows — iPhone-style left/right navigation, overlaid on the
+         springboard edges and usable with a mouse (swipe still works on touch) */
+      .sb-arrow {
+        position: absolute; top: 50%; transform: translateY(-50%); z-index: 6;
+        width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+        display: grid; place-items: center; color: #fff;
+        background: rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        transition: background .14s, opacity .18s, transform .12s;
+      }
+      .sb-arrow:hover { background: rgba(255,255,255,0.32); }
+      .sb-arrow:active { transform: translateY(-50%) scale(.92); }
+      .sb-arrow svg { width: 22px; height: 22px; }
+      .sb-arrow-prev { left: 12px; }
+      .sb-arrow-next { right: 12px; }
+      .sb-arrow.disabled { opacity: 0; pointer-events: none; }
 
       /* Dock / footer with the pencil edit toggle (bottom-left) */
       .sb-dock {
@@ -497,6 +519,7 @@
         .home-springboard { padding: 14px 12px 26px; }
         .springboard { border-radius: 24px; min-height: 74vh; }
         .sb-page { grid-template-columns: repeat(auto-fill, 74px); gap: 18px 0; padding: 12px 8px 16px; }
+        .sb-arrow { display: none; } /* swipe is the natural gesture on touch */
         .sb-dock-hint { display: none; }
         .vb-hints { display: none; }
         .vb-line { white-space: normal; }
@@ -673,7 +696,13 @@
             pages[i + 1].unshift(overflow);
           }
         }
-        while (pages.length > 1 && pages[pages.length - 1].length === 0) pages.pop();
+        // Remove surplus trailing empty pages. While arranging (edit mode) we
+        // keep a single trailing empty page so it can act as a freshly added
+        // page the user is dropping apps onto.
+        while (pages.length > 1 && pages[pages.length - 1].length === 0) {
+          if (STATE.editMode && pages[pages.length - 2].length !== 0) break;
+          pages.pop();
+        }
       }
       // Tidy folders (drop missing apps, dissolve folders left with <2 apps),
       // remove empty pages, reflow, and close a folder overlay that vanished.
@@ -689,9 +718,19 @@
             }
           }
         }
-        STATE.layout.pages = STATE.layout.pages.filter(p => p.length > 0);
+        // Drop empty pages. While arranging, keep one trailing empty page —
+        // the "new page" a user just added so they can drop apps onto it.
+        const keepTrailingEmpty = STATE.editMode && STATE.layout.pages.length > 0 &&
+          STATE.layout.pages[STATE.layout.pages.length - 1].length === 0;
+        STATE.layout.pages = STATE.layout.pages.filter((p, i) =>
+          p.length > 0 || (keepTrailingEmpty && i === STATE.layout.pages.length - 1));
         if (!STATE.layout.pages.length) STATE.layout.pages.push([]);
         reflowPages();
+        // While arranging, guarantee a trailing empty "new page" at the end so
+        // an app can always be dragged (or swiped/arrowed) onto a fresh page —
+        // just like an iPhone home screen in jiggle mode.
+        if (STATE.editMode && STATE.layout.pages[STATE.layout.pages.length - 1].length > 0)
+          STATE.layout.pages.push([]);
         clampCurrentPage();
         if (STATE.openFolderId && !findFolderById(STATE.openFolderId)) STATE.openFolderId = null;
       }
@@ -2358,13 +2397,22 @@
                         : `<div class="sb-empty-page">No apps here yet.<br>Tap the <b>+</b> below to add a website.</div>`
           }</div>`).join('');
 
-        const dots = pages.length > 1 ? `
+        // Dot strip — page indicators plus, while arranging, a "+" to add a
+        // new page. Shown whenever there's more than one page or we're editing.
+        const dots = (pages.length > 1 || edit) ? `
           <div class="sb-dots">
             ${pages.map((_, i) => `<button class="sb-dot ${i === STATE.currentPage ? 'active' : ''}" data-action="goto-page" data-page="${i}" data-dot="${i}" aria-label="Page ${i + 1}"></button>`).join('')}
+            ${edit ? `<button class="sb-dot-add" data-action="add-page" title="Add a page" aria-label="Add a page"><i data-lucide="plus"></i></button>` : ''}
           </div>` : '';
+
+        // iPhone-style prev/next arrows, shown when there's more than one page.
+        const arrows = pages.length > 1 ? `
+          <button class="sb-arrow sb-arrow-prev ${STATE.currentPage === 0 ? 'disabled' : ''}" data-action="prev-page" aria-label="Previous page"><i data-lucide="chevron-left"></i></button>
+          <button class="sb-arrow sb-arrow-next ${STATE.currentPage >= pages.length - 1 ? 'disabled' : ''}" data-action="next-page" aria-label="Next page"><i data-lucide="chevron-right"></i></button>` : '';
 
         return `
           <div class="springboard ${edit ? 'editing' : ''}">
+            ${arrows}
             <div class="sb-viewport" id="sb-viewport">
               <div class="sb-track" id="sb-track" style="width:${pages.length * 100}%; transform:translateX(-${STATE.currentPage * (100 / pages.length)}%)">
                 ${track}
@@ -2375,7 +2423,7 @@
               <button class="sb-edit-btn ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
                 <i data-lucide="${edit ? 'check' : 'pencil'}"></i>
               </button>
-              <div class="sb-dock-hint">${edit ? 'Drag to move · drop one app on another to make a folder' : ''}</div>
+              <div class="sb-dock-hint">${edit ? 'Drag to move · drop on another to make a folder · drag to an edge or tap ⊕ for a new page' : ''}</div>
               <button class="sb-add-btn" data-action="add-app" title="Add a website" aria-label="Add a website"><i data-lucide="plus"></i></button>
             </div>
           </div>`;
@@ -2714,7 +2762,10 @@
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
             case 'goto-page': gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0); break;
-            case 'toggle-edit': STATE.editMode = !STATE.editMode; if (!STATE.editMode) persistLayout(); render(); break;
+            case 'prev-page': gotoPage(STATE.currentPage - 1); break;
+            case 'next-page': gotoPage(STATE.currentPage + 1); break;
+            case 'add-page': addBlankPage(); break;
+            case 'toggle-edit': STATE.editMode = !STATE.editMode; normalizeLayout(); persistLayout(); render(); break;
             case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; render(); break;
             case 'add-starter': addStarter(parseInt(target.getAttribute('data-starter'), 10)); break;
             case 'clear-search': STATE.homeSearch = ''; render(); break;
@@ -2803,6 +2854,21 @@
         const track = document.getElementById('sb-track');
         if (track) track.style.transform = `translateX(-${STATE.currentPage * (100 / n)}%)`;
         document.querySelectorAll('.sb-dot').forEach((d, idx) => d.classList.toggle('active', idx === STATE.currentPage));
+        const prev = document.querySelector('.sb-arrow-prev');
+        const next = document.querySelector('.sb-arrow-next');
+        if (prev) prev.classList.toggle('disabled', STATE.currentPage === 0);
+        if (next) next.classList.toggle('disabled', STATE.currentPage >= n - 1);
+      }
+
+      // Add a fresh page and jump to it. Page management lives in arrange
+      // (jiggle) mode, so this turns that on; the empty page persists while
+      // editing so apps can be dragged onto it or added there.
+      function addBlankPage() {
+        if (!STATE.editMode) STATE.editMode = true;
+        normalizeLayout();                              // guarantees a trailing empty page
+        STATE.currentPage = STATE.layout.pages.length - 1;
+        persistLayout();
+        render();
       }
 
       function readLoc(cell) {
@@ -2818,8 +2884,28 @@
       }
       function cleanupDrag() {
         clearDropMarkers();
+        clearEdgeFlip();
         document.querySelectorAll('.sb-cell.dragging').forEach(n => n.classList.remove('dragging'));
         DRAG.from = null; DRAG.intent = null;
+      }
+
+      // iPhone-style "drag to the edge to turn the page": while dragging an app
+      // near the left/right border of the viewport, flip to the neighbouring
+      // page after a short hover so you can carry the app across pages.
+      let edgeFlipTimer = null;
+      function clearEdgeFlip() { if (edgeFlipTimer) { clearTimeout(edgeFlipTimer); edgeFlipTimer = null; } }
+      function handleEdgeFlip(e) {
+        // Not while reordering inside an open folder — that drag isn't a page move.
+        if (STATE.openFolderId) { clearEdgeFlip(); return; }
+        const vp = document.getElementById('sb-viewport');
+        if (!vp) { clearEdgeFlip(); return; }
+        const r = vp.getBoundingClientRect();
+        const zone = 64;
+        const dir = (e.clientX - r.left < zone) ? -1 : (r.right - e.clientX < zone) ? 1 : 0;
+        const target = STATE.currentPage + dir;
+        if (!dir || target < 0 || target >= STATE.layout.pages.length) { clearEdgeFlip(); return; }
+        if (edgeFlipTimer) return; // already counting down toward a flip
+        edgeFlipTimer = setTimeout(() => { edgeFlipTimer = null; gotoPage(target); }, 550);
       }
 
       function onDragStart(e) {
@@ -2833,6 +2919,8 @@
 
       function onDragOver(e) {
         if (!DRAG.from) return;
+        // Dragging near a left/right edge turns the page after a brief hover.
+        handleEdgeFlip(e);
         // Hovering a page dot flips to that page so you can drop across pages.
         const dot = e.target.closest('[data-dot]');
         if (dot) { e.preventDefault(); const i = +dot.getAttribute('data-dot'); if (i !== STATE.currentPage) gotoPage(i); return; }
@@ -2969,6 +3057,18 @@
         // so the user can switch it between screens without the mouse.
         if (VOICE.listenOn) stopListening();
         else startListening();
+      });
+
+      // Arrow keys page through the springboard (when on the Bookmarks screen
+      // and not typing or inside a dialog) — the keyboard counterpart to the
+      // on-screen arrows and touch swipe.
+      window.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        if (STATE.view !== 'home' || STATE.adding || STATE.openFolderId || STATE.homeSearch.trim()) return;
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+        if (STATE.layout.pages.length < 2) return;
+        gotoPage(STATE.currentPage + (e.key === 'ArrowRight' ? 1 : -1));
       });
 
       // Some browsers populate speechSynthesis voices asynchronously.
