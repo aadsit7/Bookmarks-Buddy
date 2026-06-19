@@ -923,6 +923,17 @@
       // into a real domain when the recognizer dropped the dot.
       const SPOKEN_TLDS = ['com', 'org', 'net'];
 
+      // Connector/filler words that are never a company name on their own. After
+      // the add verb is stripped, a leftover like "in" ("add in", a mis-heard
+      // fragment) must NOT become a bookmark such as "in.com". These are trimmed
+      // off the edges of a bare-name add phrase, and a phrase that is nothing but
+      // these is rejected entirely.
+      const ADD_STOPWORDS = new Set([
+        'in', 'on', 'at', 'to', 'into', 'onto', 'up', 'it', 'its', "it's",
+        'of', 'and', 'or', 'with', 'for', 'a', 'an', 'the', 'my', 'me',
+        'this', 'that', 'is', 'as', 'by', 'be', 'so', 'um', 'uh', 'one'
+      ]);
+
       // Strip polite filler and "bookmark"-ish words from a spoken add phrase
       // while PRESERVING dots/hyphens so a dictated URL stays a URL.
       function cleanAddQuery(q) {
@@ -956,9 +967,17 @@
           }
         }
         // Bare company name -> guess a .com and title-case the spoken words.
-        const slug = t.replace(/[^a-z0-9]+/g, '');
-        if (!slug) return null;
-        return { url: slug + '.com', name: titleCase(t) };
+        // First peel any connector/filler words off the edges so "add in" (or a
+        // mis-heard "in") collapses to nothing instead of inventing "in.com".
+        let words = t.split(/\s+/).filter(Boolean);
+        while (words.length && ADD_STOPWORDS.has(words[0])) words.shift();
+        while (words.length && ADD_STOPWORDS.has(words[words.length - 1])) words.pop();
+        const cleaned = words.join(' ');
+        const slug = cleaned.replace(/[^a-z0-9]+/g, '');
+        // Nothing substantive left (pure filler), or the recognizer caught only a
+        // lone noise letter — refuse rather than save a junk bookmark.
+        if (!slug || slug.length < 2) return null;
+        return { url: slug + '.com', name: titleCase(cleaned) };
       }
 
       // Pull the bookmark name(s) out of a split-view request. Returns
