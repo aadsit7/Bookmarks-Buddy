@@ -396,6 +396,86 @@
       /* Listen tab extras (carried over from the old voice panel) */
       .focus-options { margin-top: 24px; width: 100%; max-width: 420px; padding-top: 16px; border-top: 1px solid var(--divider); }
 
+      /* ================= Onboarding (first run, no bookmarks) ================= */
+      .onboard { max-width: 880px; margin: 0 auto; padding: 34px 22px 48px; }
+      .onboard-hero { position: relative; overflow: hidden; background: #fff; border: 1px solid var(--divider); border-radius: 24px; box-shadow: var(--shadow-card); padding: 42px 38px 38px; text-align: center; }
+      .onboard-hero::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 180px; background: radial-gradient(120% 100% at 50% 0%, rgba(49,209,255,0.16), transparent 72%); pointer-events: none; }
+      .onboard-mark { position: relative; width: 66px; height: 66px; border-radius: 19px; background: linear-gradient(140deg, var(--primary), var(--cyan)); display: grid; place-items: center; color: #fff; margin: 0 auto 20px; box-shadow: var(--shadow-brand); }
+      .onboard-mark svg { width: 33px; height: 33px; }
+      .onboard-title { position: relative; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: var(--navy-deep); line-height: 1.12; }
+      .onboard-sub { position: relative; font-size: 15px; line-height: 1.62; color: var(--gray); margin: 12px auto 0; max-width: 470px; text-wrap: pretty; }
+      .onboard-sub b { color: var(--navy-deep); font-weight: 700; }
+      .onboard-cta { position: relative; display: flex; gap: 10px; justify-content: center; margin-top: 24px; flex-wrap: wrap; }
+      .onboard-cta .btn-primary { min-height: 48px; padding: 0 24px; font-size: 14px; }
+      .onboard-cta .btn-outline { min-height: 48px; padding: 0 20px; font-size: 13.5px; }
+      .onboard-divider { position: relative; display: flex; align-items: center; gap: 14px; margin: 32px auto 18px; max-width: 440px; color: var(--n400); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+      .onboard-divider::before, .onboard-divider::after { content: ''; flex: 1; height: 1px; background: var(--divider); }
+      .starter-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+      .starter-chip { display: flex; align-items: center; gap: 11px; padding: 11px 13px; border: 1.5px solid var(--n200); border-radius: 12px; background: var(--n25); cursor: pointer; transition: border-color .14s, box-shadow .14s, transform .12s; text-align: left; font-family: inherit; }
+      .starter-chip:hover { border-color: var(--primary); box-shadow: var(--shadow-card); }
+      .starter-chip:active { transform: scale(0.98); }
+      .starter-chip img { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; }
+      .starter-chip.sc-noimg::before { content: attr(data-letter); width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: var(--quote); color: var(--primary); font-weight: 800; font-size: 13px; flex-shrink: 0; }
+      .starter-chip .sc-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--navy-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .starter-chip .sc-add { color: var(--n400); flex-shrink: 0; display: grid; place-items: center; transition: color .12s; }
+      .starter-chip:hover .sc-add { color: var(--primary); }
+      .starter-chip .sc-add svg { width: 16px; height: 16px; }
+
+      /* ================= Home voice bar (voice, always present on Bookmarks) ================= */
+      .voicebar { position: relative; overflow: hidden; display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg, var(--navy), var(--navy-deep)); border-radius: 18px; padding: 15px 18px; margin-bottom: 16px; box-shadow: var(--shadow-card); }
+      .voicebar::after { content: ''; position: absolute; right: -50px; top: -50px; width: 200px; height: 200px; border-radius: 50%; background: radial-gradient(circle, rgba(49,209,255,0.20), transparent 70%); pointer-events: none; }
+      .vb-orb { position: relative; flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer; display: grid; place-items: center; color: #fff; background: var(--primary); box-shadow: 0 6px 18px rgba(3,114,255,0.42); transition: transform .16s var(--ease), background .2s, color .2s, box-shadow .2s; }
+      .vb-orb svg { width: 22px; height: 22px; }
+      .vb-orb:hover { transform: scale(1.05); }
+      .vb-orb:active { transform: scale(0.96); }
+      .vb-orb.on { background: #fff; color: var(--primary); box-shadow: 0 0 0 6px rgba(49,209,255,0.30); }
+      .vb-orb.on::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--cyan); animation: orbPulse 1.9s ease-out infinite; pointer-events: none; }
+      .vb-orb:disabled { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.5); cursor: not-allowed; box-shadow: none; }
+      .vb-body { flex: 1; min-width: 0; position: relative; z-index: 1; }
+      .vb-status { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan-hi); display: inline-flex; align-items: center; gap: 7px; }
+      .vb-status .st-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.4); }
+      .vb-status.on .st-dot { background: #2bd576; animation: dotBlink 1.5s ease-out infinite; }
+      .vb-line { font-size: 16px; font-weight: 600; color: #fff; margin-top: 4px; line-height: 1.35; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .vb-line.muted { color: rgba(255,255,255,0.68); font-weight: 500; }
+      .vb-line .caret { display: inline-block; width: 2px; height: 1em; background: var(--cyan); margin-left: 2px; vertical-align: text-bottom; animation: caretBlink 1s step-end infinite; }
+      .vb-hints { display: flex; gap: 7px; flex-shrink: 0; position: relative; z-index: 1; }
+      .vb-hint { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.94); background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 13px; white-space: nowrap; }
+
+      /* ================= Home toolbar (search) ================= */
+      .home-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+      .home-search { flex: 1; position: relative; }
+      .home-search .search-ic { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--n400); pointer-events: none; }
+      .home-search input { padding-left: 42px; height: 46px; border-radius: 999px; }
+      .home-search .clear-search { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: none; background: var(--n100); color: var(--n500); border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+      .home-search .clear-search:hover { background: var(--n200); color: var(--navy-deep); }
+      .home-search .clear-search svg { width: 15px; height: 15px; }
+      .home-add-btn { flex-shrink: 0; min-height: 46px; }
+
+      /* Search results */
+      .search-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+      .search-empty { text-align: center; padding: 54px 20px; color: var(--n500); }
+      .search-empty svg { width: 34px; height: 34px; color: var(--n300); margin-bottom: 12px; }
+      .search-empty p { font-size: 14px; line-height: 1.6; }
+      .src-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1.5px solid var(--n200); border-radius: 14px; background: #fff; cursor: pointer; transition: border-color .14s, box-shadow .14s; }
+      .src-card:hover { border-color: var(--primary); box-shadow: var(--shadow-card); }
+      .src-fav { width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center; background: var(--n25); border: 1px solid var(--n200); overflow: hidden; color: var(--primary); font-weight: 800; font-size: 16px; }
+      .src-fav img { width: 22px; height: 22px; }
+      .src-meta { flex: 1; min-width: 0; }
+      .src-name { font-size: 14px; font-weight: 700; color: var(--navy-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .src-host { font-size: 11.5px; color: var(--n500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+      .src-edit { width: 34px; height: 34px; border-radius: 9px; border: none; background: transparent; color: var(--n400); cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
+      .src-edit:hover { background: var(--n100); color: var(--navy-deep); }
+      .src-edit svg { width: 16px; height: 16px; }
+
+      /* Quick-add suggestions inside the Add modal */
+      .modal-sugg { margin: 2px 0 16px; }
+      .modal-sugg-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n500); margin-bottom: 9px; }
+      .modal-sugg-row { display: flex; flex-wrap: wrap; gap: 7px; }
+      .sugg-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px 6px 8px; border: 1.5px solid var(--n200); border-radius: 999px; background: var(--n25); cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--navy-deep); transition: border-color .14s, background .14s, color .14s; font-family: inherit; }
+      .sugg-pill:hover { border-color: var(--primary); background: var(--quote); color: var(--primary); }
+      .sugg-pill img { width: 18px; height: 18px; border-radius: 4px; }
+      .sugg-pill.sc-noimg::before { content: attr(data-letter); width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; background: var(--quote); color: var(--primary); font-weight: 800; font-size: 10px; }
+
       /* ================= Responsive ================= */
       @media (max-width: 900px) {
         .home-grid { grid-template-columns: 1fr; }
@@ -415,6 +495,12 @@
         .springboard { border-radius: 24px; min-height: 74vh; }
         .sb-page { gap: 14px 4px; padding: 8px 6px 14px; }
         .sb-dock-hint { display: none; }
+        .vb-hints { display: none; }
+        .vb-line { white-space: normal; }
+        .home-tools { flex-wrap: wrap; }
+        .home-add-btn { width: 100%; }
+        .onboard-hero { padding: 32px 22px 30px; }
+        .onboard-title { font-size: 23px; }
       }
     </style>
   </head>
@@ -439,6 +525,23 @@
       const LS_SETTINGS  = 'bookmarksBuddy.settings.v1';
       const LS_LAYOUT    = 'bookmarksBuddy.layout.v1';
 
+      // A short, recognizable starter set so a brand-new user can fill their
+      // home screen in one tap each instead of facing an empty grid.
+      const STARTER_SITES = [
+        { name: 'Gmail', url: 'gmail.com' },
+        { name: 'Calendar', url: 'calendar.google.com' },
+        { name: 'Drive', url: 'drive.google.com' },
+        { name: 'YouTube', url: 'youtube.com' },
+        { name: 'Notion', url: 'notion.so' },
+        { name: 'Slack', url: 'slack.com' },
+        { name: 'Salesforce', url: 'salesforce.com' },
+        { name: 'GitHub', url: 'github.com' },
+        { name: 'LinkedIn', url: 'linkedin.com' },
+        { name: 'ChatGPT', url: 'chatgpt.com' },
+        { name: 'Figma', url: 'figma.com' },
+        { name: 'Amazon', url: 'amazon.com' }
+      ];
+
       // How many cells (apps or folders) fit on one springboard page before it
       // spills onto the next — a 4×3 iPhone-style grid.
       const PAGE_SIZE = 12;
@@ -461,7 +564,8 @@
         currentPage: 0,
         editMode: false,           // "jiggle" mode for rearranging
         openFolderId: null,        // folder whose overlay is open, if any
-        adding: false              // add-website modal open
+        adding: false,             // add-website modal open
+        homeSearch: ''             // live filter on the Bookmarks screen
       };
 
       // Transient drag state for rearranging in edit mode.
@@ -680,7 +784,7 @@
 
       function faviconFor(url) {
         const h = hostOf(url);
-        return h ? `https://www.google.com/s/2/favicons?domain=${encodeURIComponent(h)}&sz=64` : '';
+        return h ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=64` : '';
       }
 
       // Levenshtein-based 0..1 similarity for short strings (typo tolerance).
@@ -1450,18 +1554,29 @@
       // Patch the live transcript node directly so streaming words don't force
       // a full re-render (which would steal focus from the add-bookmark form).
       function patchTranscript(text) {
-        const nodes = [document.getElementById('live-transcript'), document.getElementById('focus-transcript')].filter(Boolean);
-        // No transcript on screen (e.g. the springboard home) — treat as handled
-        // so live interim words don't force a full springboard re-render.
+        const nodes = [
+          document.getElementById('live-transcript'),
+          document.getElementById('focus-transcript'),
+          document.getElementById('home-transcript')
+        ].filter(Boolean);
+        // No transcript on screen — treat as handled so live interim words
+        // don't force a full re-render.
         if (!nodes.length) return true;
         nodes.forEach(n => {
           if (text) n.innerHTML = escHtml(text) + '<span class="caret"></span>';
-          else n.innerHTML = transcriptResting(n.id === 'focus-transcript');
+          else n.innerHTML = transcriptResting(n.id);
           n.classList.toggle('muted', !text);
         });
         return true;
       }
-      function transcriptResting(isFocus) {
+      function transcriptResting(id) {
+        if (id === 'home-transcript') {
+          const fn = escHtml(firstSpokenName());
+          return VOICE.listenOn
+            ? 'Listening… say “open ' + fn + '” or “add” a site'
+            : 'Tap to talk, then say “open ' + fn + '”';
+        }
+        const isFocus = id === 'focus-transcript';
         if (VOICE.listenOn) return 'Listening… say “open” or “add” and a name';
         return isFocus ? 'Tap the circle to start listening' : 'Press the mic to start';
       }
@@ -1483,6 +1598,28 @@
         STATE.currentPage = STATE.layout.pages.length - 1; // show where it landed
         showToast('Added “' + name + '”', 'check');
         render();
+      }
+
+      // One-tap add from the starter suggestions (onboarding + Add modal).
+      function addStarter(i) {
+        const s = STARTER_SITES[i];
+        if (!s) return;
+        const host = hostOf(s.url);
+        if (host && STATE.bookmarks.some(b => hostOf(b.url) === host)) {
+          showToast('“' + s.name + '” is already saved', 'info');
+          return;
+        }
+        STATE.bookmarks.push({ id: uid(), name: s.name, url: s.url });
+        persistBookmarks();
+        STATE.currentPage = STATE.layout.pages.length - 1;
+        showToast('Added “' + s.name + '”', 'check');
+        render();
+      }
+
+      // Starter sites the user hasn't already saved (matched by host).
+      function starterSuggestions(n) {
+        const have = new Set(STATE.bookmarks.map(b => hostOf(b.url)));
+        return STARTER_SITES.filter(s => !have.has(hostOf(s.url))).slice(0, n);
       }
 
       function saveBookmarks() {
@@ -1637,13 +1774,136 @@
       }
 
       /* ---------------- home: iPhone-style springboard ---------------- */
+      function firstSpokenName() {
+        const b = STATE.bookmarks[0];
+        return b ? (b.name || hostCore(b.url) || 'Gmail') : 'Gmail';
+      }
+
       function renderHome() {
+        // Brand-new user → a welcoming hero instead of an empty grid.
+        if (!STATE.bookmarks.length) return `<div class="home">${renderOnboard()}</div>`;
+
+        const q = STATE.homeSearch.trim();
         return `
           <div class="home home-springboard">
             ${VOICE.pendingOpen ? renderPending() : ''}
             ${VOICE.pendingGroup ? renderPendingGroup() : ''}
             ${VOICE.pendingSplit ? renderPendingSplit() : ''}
-            ${renderSpringboard()}
+            ${renderVoiceBar()}
+            ${renderHomeTools()}
+            ${q ? renderSearchResults(q) : renderSpringboard()}
+          </div>`;
+      }
+
+      // First-run welcome: explains the product in a line, gives a clear primary
+      // action, and lets the user seed their home screen one tap at a time.
+      function renderOnboard() {
+        const sr = VOICE.srSupported;
+        const sugg = starterSuggestions(8);
+        return `
+          <div class="onboard">
+            <div class="onboard-hero">
+              <div class="onboard-mark"><i data-lucide="bookmark"></i></div>
+              <div class="onboard-title">Open your sites by voice</div>
+              <div class="onboard-sub">Save the websites you visit most, then open them hands-free — just say <b>“open Gmail.”</b> Everything stays on this computer.</div>
+              <div class="onboard-cta">
+                <button class="btn-primary" data-action="add-app"><i data-lucide="plus"></i> Add a website</button>
+                ${sr ? `<button class="btn-outline" data-action="toggle-listen"><i data-lucide="mic"></i> Turn on voice</button>` : ''}
+              </div>
+              ${sugg.length ? `
+                <div class="onboard-divider">Or start with a favorite</div>
+                <div class="starter-grid">${sugg.map(renderStarterChip).join('')}</div>` : ''}
+            </div>
+          </div>`;
+      }
+
+      function renderStarterChip(s) {
+        const i = STARTER_SITES.indexOf(s);
+        const fav = faviconFor(s.url);
+        const letter = (s.name.replace(/[^a-z0-9]/ig, '').charAt(0) || '?').toUpperCase();
+        return `
+          <button class="starter-chip" data-action="add-starter" data-starter="${i}" title="Add ${escAttr(s.name)}">
+            <img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('sc-noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">
+            <span class="sc-name">${escHtml(s.name)}</span>
+            <span class="sc-add"><i data-lucide="plus"></i></span>
+          </button>`;
+      }
+
+      // The voice bar keeps the product's core gesture present on the Bookmarks
+      // screen: a tap-to-talk orb, the live transcript, and a couple of example
+      // commands so the feature is never hidden behind the Listen tab.
+      function renderVoiceBar() {
+        const sr = VOICE.srSupported;
+        const on = VOICE.listenOn;
+        const interim = VOICE.interimText;
+        const line = interim ? (escHtml(interim) + '<span class="caret"></span>') : transcriptResting('home-transcript');
+        const hints = voiceBarHints();
+        return `
+          <div class="voicebar">
+            <button class="vb-orb ${on ? 'on' : ''}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} aria-label="${on ? 'Stop listening' : 'Start listening'}" title="${on ? 'Listening — tap to stop (Ctrl+Alt+B)' : 'Tap to talk (Ctrl+Alt+B)'}">
+              <i data-lucide="mic"></i>
+            </button>
+            <div class="vb-body">
+              <div class="vb-status ${on ? 'on' : ''}"><span class="st-dot"></span>${on ? 'Listening' : (sr ? 'Voice ready' : 'Voice')}</div>
+              <div class="vb-line ${interim ? '' : 'muted'}" id="home-transcript">${line}</div>
+            </div>
+            ${sr ? `<div class="vb-hints">${hints.map(h => `<span class="vb-hint">${escHtml(h)}</span>`).join('')}</div>` : ''}
+          </div>`;
+      }
+
+      function voiceBarHints() {
+        const fn = firstSpokenName();
+        const chips = ['“open ' + fn + '”'];
+        const f = allFolders()[0];
+        if (f && f.name) chips.push('“open ' + f.name + ' folder”');
+        else if (STATE.bookmarks.length >= 2) {
+          const two = STATE.bookmarks.slice(0, 2).map(b => b.name || hostCore(b.url));
+          chips.push('“split ' + two[0] + ' and ' + two[1] + '”');
+        } else chips.push('“add Dropbox”');
+        return chips.slice(0, 2);
+      }
+
+      // Search + add toolbar, shown once a collection is big enough to need it.
+      function renderHomeTools() {
+        if (STATE.bookmarks.length < 5) return '';
+        const q = STATE.homeSearch;
+        return `
+          <div class="home-tools">
+            <div class="home-search">
+              <i data-lucide="search" class="search-ic"></i>
+              <input type="text" id="home-search" placeholder="Search your bookmarks…" value="${escAttr(q)}" autocomplete="off" spellcheck="false">
+              ${q ? `<button class="clear-search" data-action="clear-search" aria-label="Clear search"><i data-lucide="x"></i></button>` : ''}
+            </div>
+            <button class="btn-primary home-add-btn" data-action="add-app"><i data-lucide="plus"></i> Add</button>
+          </div>`;
+      }
+
+      function renderSearchResults(q) {
+        const nq = normalize(q);
+        const matches = STATE.bookmarks.filter(b =>
+          normalize(b.name).includes(nq) ||
+          normalize(hostCore(b.url)).includes(nq) ||
+          normalize(hostOf(b.url).replace(/\./g, ' ')).includes(nq));
+        if (!matches.length) {
+          return `<div class="search-empty"><i data-lucide="search-x"></i><p>No bookmarks match “${escHtml(q)}”.<br>Try a different word, or add it as a new site.</p></div>`;
+        }
+        return `<div class="search-results">${matches.map(renderSearchCard).join('')}</div>`;
+      }
+
+      function renderSearchCard(bm) {
+        const fav = faviconFor(bm.url);
+        const letter = appLetter(bm);
+        const inner = fav
+          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p)p.textContent='${escAttr(letter)}'">`
+          : escHtml(letter);
+        return `
+          <div class="src-card" data-action="open-bookmark" data-id="${escAttr(bm.id)}" title="Open ${escAttr(bm.name)}">
+            <div class="src-fav">${inner}</div>
+            <div class="src-meta">
+              <div class="src-name">${escHtml(bm.name || hostCore(bm.url))}</div>
+              <div class="src-host">${escHtml(hostOf(bm.url) || bm.url)}</div>
+            </div>
+            <button class="src-edit" data-action="edit-bookmark" data-id="${escAttr(bm.id)}" aria-label="Edit ${escAttr(bm.name)}"><i data-lucide="pencil"></i></button>
           </div>`;
       }
 
@@ -1697,7 +1957,7 @@
         const fav = faviconFor(bm.url);
         const letter = appLetter(bm);
         const tileInner = fav
-          ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove();this.parentNode.classList.add('noimg');this.parentNode.setAttribute('data-letter','${escAttr(letter)}')">`
+          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
           : `<span class="sb-letter">${escHtml(letter)}</span>`;
         return `
           <div class="sb-cell" data-sb="app" data-page="${pi}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
@@ -1739,7 +1999,7 @@
           const fav = faviconFor(bm.url);
           const letter = appLetter(bm);
           const tileInner = fav
-            ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove();this.parentNode.classList.add('noimg');this.parentNode.setAttribute('data-letter','${escAttr(letter)}')">`
+            ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
             : `<span class="sb-letter">${escHtml(letter)}</span>`;
           return `
             <div class="sb-cell" data-sb="fapp" data-fid="${escAttr(folder.id)}" data-index="${idx}" data-id="${escAttr(bm.id)}" draggable="${edit ? 'true' : 'false'}">
@@ -1765,6 +2025,19 @@
 
       function renderAddModal() {
         if (!STATE.adding) return '';
+        const sugg = starterSuggestions(6);
+        const suggHtml = sugg.length ? `
+              <div class="modal-sugg">
+                <div class="modal-sugg-label">Quick add</div>
+                <div class="modal-sugg-row">
+                  ${sugg.map(s => {
+                    const i = STARTER_SITES.indexOf(s);
+                    const fav = faviconFor(s.url);
+                    const letter = (s.name.replace(/[^a-z0-9]/ig, '').charAt(0) || '?').toUpperCase();
+                    return `<button class="sugg-pill" data-action="add-starter" data-starter="${i}"><img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('sc-noimg');p.setAttribute('data-letter','${escAttr(letter)}');}"><span>${escHtml(s.name)}</span></button>`;
+                  }).join('')}
+                </div>
+              </div>` : '';
         return `
           <div class="sb-overlay">
             <div class="sb-overlay-bg" data-action="close-add"></div>
@@ -1775,6 +2048,7 @@
                 <input type="text" id="bm-name" placeholder="Name (e.g. Salesforce)" value="${escAttr(STATE.draftName)}" autocomplete="off">
                 <input type="text" id="bm-url" placeholder="Web address (salesforce.com)" value="${escAttr(STATE.draftUrl)}" autocomplete="off">
               </div>
+              ${suggHtml}
               <div class="modal-actions">
                 <span style="flex:1"></span>
                 <button class="btn-outline" data-action="close-add">Cancel</button>
@@ -1924,7 +2198,7 @@
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
               <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group. Say “split view” and two names to put them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
-              <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting(true)}</div>
+              <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
                 ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
@@ -1999,6 +2273,8 @@
             case 'goto-page': gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0); break;
             case 'toggle-edit': STATE.editMode = !STATE.editMode; if (!STATE.editMode) persistLayout(); render(); break;
             case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; render(); break;
+            case 'add-starter': addStarter(parseInt(target.getAttribute('data-starter'), 10)); break;
+            case 'clear-search': STATE.homeSearch = ''; render(); break;
             case 'close-add': STATE.adding = false; render(); break;
             case 'open-folder': STATE.openFolderId = fid; render(); break;
             case 'close-folder': STATE.openFolderId = null; persistLayout(); render(); break;
@@ -2015,6 +2291,14 @@
         // Add-form drafts (kept in state so voice re-renders don't lose typing)
         const nameEl = document.getElementById('bm-name');
         const urlEl = document.getElementById('bm-url');
+        // Live search on the Bookmarks screen. render() captures/restores focus
+        // (with caret position), so re-rendering on each keystroke keeps typing
+        // smooth while the results update underneath.
+        const searchEl = document.getElementById('home-search');
+        if (searchEl) {
+          searchEl.oninput = (e) => { STATE.homeSearch = e.target.value; render(); };
+          searchEl.onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); STATE.homeSearch = ''; render(); } };
+        }
         if (nameEl) {
           nameEl.oninput = (e) => { STATE.draftName = e.target.value; };
           nameEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (urlEl) urlEl.focus(); } };
