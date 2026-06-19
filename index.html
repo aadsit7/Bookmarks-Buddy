@@ -564,10 +564,12 @@
        * sheet layer stays dormant and the app behaves exactly as the
        * localStorage-only app it has always been.
        * ================================================================ */
-      // Paste your Apps Script app_token between the quotes to embed it.
-      // It can also be supplied without editing this file — append
-      // ?token=… to the URL once, or run bbSetToken('…') in the console.
-      const EMBEDDED_APP_TOKEN = '';
+      // The Apps Script app_token, embedded so sync is on by default. NOTE:
+      // this ships in the served page, so anyone who can open the app can read
+      // it — rotate it (change the 'app_token' Script Property and this value)
+      // if it's ever misused. A ?token=… URL param or bbSetToken('…') in the
+      // console overrides this per-device without editing the file.
+      const EMBEDDED_APP_TOKEN = 'c1XGANPfknryxC-49LbEhOljwWKwYIzo';
 
       const SHEET = {
         url: 'https://script.google.com/macros/s/AKfycbwXvgj1niSwrREBepEA9oO_YNBtgyq1vSdZPNclYBqMz0ytTI1r1sjUDxePExx5B0mOlA/exec',
