@@ -279,15 +279,15 @@
       .sb-track { display: flex; height: 100%; transition: transform .32s var(--ease); will-change: transform; }
       .sb-page {
         flex: 0 0 auto;
-        display: grid; grid-template-columns: repeat(auto-fill, 92px); justify-content: space-evenly;
+        display: grid; grid-template-columns: repeat(auto-fill, 120px); justify-content: space-evenly;
         grid-auto-rows: min-content;
-        gap: 26px 0; align-content: start; padding: 18px 20px 22px;
+        gap: 30px 0; align-content: start; padding: 18px 20px 22px;
       }
       .sb-empty-page { grid-column: 1 / -1; text-align: center; color: var(--n500); font-size: 13.5px; line-height: 1.6; padding: 48px 12px; }
 
       .sb-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
       .sb-tile, .sb-folder {
-        position: relative; width: 62px; height: 62px; border-radius: 16px; cursor: pointer;
+        position: relative; width: 80px; height: 80px; border-radius: 20px; cursor: pointer;
         display: grid; place-items: center; overflow: hidden;
         background: #fff;
         border: 1px solid rgba(120,130,160,0.16);
@@ -297,14 +297,25 @@
         transition: transform .14s var(--ease), box-shadow .16s, outline-color .14s;
       }
       .sb-tile:hover, .sb-folder:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(60,64,80,0.22), 0 2px 6px rgba(60,64,80,0.12); }
-      .sb-tile img { width: 38px; height: 38px; display: block; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
-      .sb-tile .sb-letter { font-size: 26px; font-weight: 800; color: var(--primary); }
-      .sb-tile.noimg::after { content: attr(data-letter); font-size: 26px; font-weight: 800; color: var(--primary); }
+      .sb-tile img { width: 50px; height: 50px; display: block; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
+      .sb-tile .sb-letter { font-size: 34px; font-weight: 800; color: var(--primary); }
+      .sb-tile.noimg::after { content: attr(data-letter); font-size: 34px; font-weight: 800; color: var(--primary); }
       .sb-label {
-        font-size: 11.5px; font-weight: 600; color: var(--navy-deep); text-align: center; line-height: 1.2;
-        max-width: 76px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        font-size: 15px; font-weight: 600; color: var(--navy-deep); text-align: center; line-height: 1.2;
+        max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         text-shadow: 0 1px 2px rgba(255,255,255,0.7);
       }
+
+      /* Empty grid slot — an invisible placeholder that holds a position open so
+         apps and folders can stay exactly where they're dropped, leaving gaps
+         anywhere on the page just like an iPhone home screen. It mirrors a real
+         cell's footprint (tile + label) so the grid stays perfectly aligned. */
+      .sb-slot-empty { pointer-events: none; }
+      .sb-slot-empty .sb-tile-ghost { width: 80px; height: 80px; border-radius: 20px; border: 2px dashed transparent; transition: border-color .14s, background .14s; }
+      .springboard.editing .sb-slot-empty { pointer-events: auto; }
+      .springboard.editing .sb-slot-empty .sb-tile-ghost { border-color: rgba(22,31,91,0.16); background: rgba(255,255,255,0.30); }
+      .sb-cell.drop-slot .sb-tile-ghost { border-color: var(--primary); border-style: solid; background: var(--quote); }
+      .sb-cell.drop-swap .sb-tile, .sb-cell.drop-swap .sb-folder { outline: 3px dashed var(--primary); outline-offset: 2px; }
 
       /* Folder tile — a frosted square holding a 3×3 preview of its apps */
       .sb-folder { background: rgba(118,128,155,0.18); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: 6px; }
@@ -320,8 +331,8 @@
         display: grid; place-items: center;
       }
       .sb-badge svg { width: 13px; height: 13px; }
-      .springboard.editing .sb-cell { animation: jiggle .32s infinite; }
-      .springboard.editing .sb-cell:nth-child(even) { animation-delay: -.16s; }
+      .springboard.editing .sb-cell:not(.sb-slot-empty) { animation: jiggle .32s infinite; }
+      .springboard.editing .sb-cell:nth-child(even):not(.sb-slot-empty) { animation-delay: -.16s; }
       .springboard.editing .sb-tile, .springboard.editing .sb-folder { cursor: grab; }
       .sb-cell.dragging { opacity: .28; }
       @keyframes jiggle { 0% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.3deg); } 100% { transform: rotate(-1.2deg); } }
@@ -540,7 +551,7 @@
         .focus-transcript { font-size: 20px; }
         .home-springboard { padding: 14px 12px 26px; }
         .springboard { border-radius: 24px; min-height: 74vh; }
-        .sb-page { grid-template-columns: repeat(auto-fill, 74px); gap: 18px 0; padding: 12px 8px 16px; }
+        .sb-page { grid-template-columns: repeat(auto-fill, 98px); gap: 22px 0; padding: 12px 8px 16px; }
         .sb-arrow { display: none; } /* swipe is the natural gesture on touch */
         .sb-dock-hint { display: none; }
         .vb-hints { display: none; }
@@ -978,10 +989,18 @@
        * home screen (pages + folders), kept reconciled with the flat
        * STATE.bookmarks list.
        * ================================================================ */
+      // Each page is a FIXED-LENGTH grid of PAGE_SIZE "slots". A slot holds a
+      // cell ({type:'app'|'folder',…}) or null when empty. Keeping empty slots
+      // explicit is what lets apps and folders stay exactly where they're
+      // dropped — leaving gaps anywhere on the page, just like an iPhone home
+      // screen — instead of always packing toward the top-left.
+      function newPage() { return new Array(PAGE_SIZE).fill(null); }
+      function isPageEmpty(p) { return !p.some(s => s); }
+      function firstEmptySlot(p) { const i = p.indexOf(null); return i; }
       function pageArr(i) { return STATE.layout.pages[i]; }
       function findFolderById(fid) {
         for (const page of STATE.layout.pages)
-          for (const it of page) if (it.type === 'folder' && it.id === fid) return it;
+          for (const it of page) if (it && it.type === 'folder' && it.id === fid) return it;
         return null;
       }
       function asApp(item) { return { type: 'app', id: item.id }; }
@@ -992,57 +1011,75 @@
         const n = Math.max(1, STATE.layout.pages.length);
         STATE.currentPage = Math.min(Math.max(0, STATE.currentPage), n - 1);
       }
-      // Append an app to the last page, opening a fresh page when it's full.
-      function addAppToLayout(id) {
-        let last = STATE.layout.pages[STATE.layout.pages.length - 1];
-        if (!last || last.length >= PAGE_SIZE) { last = []; STATE.layout.pages.push(last); }
-        last.push({ type: 'app', id });
-      }
-      // Spill any over-full page onto the next so no page exceeds PAGE_SIZE.
-      function reflowPages() {
+      // Coerce every page to a length-PAGE_SIZE slot array. Also migrates the
+      // older packed format (variable-length arrays with no empty slots) by
+      // padding it out with nulls; any overflow spills onto a new page.
+      function ensureSlots() {
         const pages = STATE.layout.pages;
         for (let i = 0; i < pages.length; i++) {
-          while (pages[i].length > PAGE_SIZE) {
-            const overflow = pages[i].pop();
-            if (!pages[i + 1]) pages[i + 1] = [];
-            pages[i + 1].unshift(overflow);
+          let p = Array.isArray(pages[i]) ? pages[i].filter(s => s !== undefined) : [];
+          if (p.length > PAGE_SIZE) {
+            const overflow = p.slice(PAGE_SIZE);
+            p = p.slice(0, PAGE_SIZE);
+            pages.splice(i + 1, 0, overflow); // re-shaped on the next loop pass
           }
-        }
-        // Remove surplus trailing empty pages. While arranging (edit mode) we
-        // keep a single trailing empty page so it can act as a freshly added
-        // page the user is dropping apps onto.
-        while (pages.length > 1 && pages[pages.length - 1].length === 0) {
-          if (STATE.editMode && pages[pages.length - 2].length !== 0) break;
-          pages.pop();
+          while (p.length < PAGE_SIZE) p.push(null);
+          pages[i] = p;
         }
       }
+      // Drop the first empty slot found anywhere, opening a fresh page if every
+      // page is full. Used when adding a new bookmark or re-homing a displaced
+      // app (e.g. one pulled out of a folder).
+      function placeInFirstEmpty(cell) {
+        for (const page of STATE.layout.pages) {
+          const s = firstEmptySlot(page);
+          if (s !== -1) { page[s] = cell; return; }
+        }
+        const p = newPage(); p[0] = cell; STATE.layout.pages.push(p);
+      }
+      function addAppToLayout(id) { placeInFirstEmpty({ type: 'app', id }); }
+      // Which page a given bookmark ended up on (so the view can jump to it).
+      function pageIndexOfApp(id) {
+        for (let i = 0; i < STATE.layout.pages.length; i++)
+          for (const it of STATE.layout.pages[i]) {
+            if (!it) continue;
+            if (it.type === 'app' && it.id === id) return i;
+            if (it.type === 'folder' && it.items.some(a => a.id === id)) return i;
+          }
+        return STATE.layout.pages.length - 1;
+      }
       // Tidy folders (drop missing apps, dissolve folders left with <2 apps),
-      // remove empty pages, reflow, and close a folder overlay that vanished.
+      // drop stale app cells, remove fully-empty pages, and close a folder
+      // overlay that vanished. Gaps within a page are always preserved.
       function normalizeLayout() {
+        if (!STATE.layout || !Array.isArray(STATE.layout.pages)) STATE.layout = { pages: [] };
+        ensureSlots();
         const valid = new Set(STATE.bookmarks.map(b => b.id));
         for (const page of STATE.layout.pages) {
-          for (let i = page.length - 1; i >= 0; i--) {
+          for (let i = 0; i < page.length; i++) {
             const it = page[i];
+            if (!it) continue;
             if (it.type === 'folder') {
               it.items = it.items.filter(a => valid.has(a.id));
-              if (it.items.length === 0) page.splice(i, 1);
+              if (it.items.length === 0) page[i] = null;
               else if (it.items.length === 1) page[i] = { type: 'app', id: it.items[0].id };
+            } else if (it.type === 'app' && !valid.has(it.id)) {
+              page[i] = null;
             }
           }
         }
         // Drop empty pages. While arranging, keep one trailing empty page —
         // the "new page" a user just added so they can drop apps onto it.
-        const keepTrailingEmpty = STATE.editMode && STATE.layout.pages.length > 0 &&
-          STATE.layout.pages[STATE.layout.pages.length - 1].length === 0;
-        STATE.layout.pages = STATE.layout.pages.filter((p, i) =>
-          p.length > 0 || (keepTrailingEmpty && i === STATE.layout.pages.length - 1));
-        if (!STATE.layout.pages.length) STATE.layout.pages.push([]);
-        reflowPages();
+        const pages = STATE.layout.pages;
+        const keepTrailingEmpty = STATE.editMode && pages.length > 0 && isPageEmpty(pages[pages.length - 1]);
+        STATE.layout.pages = pages.filter((p, i) =>
+          !isPageEmpty(p) || (keepTrailingEmpty && i === pages.length - 1));
+        if (!STATE.layout.pages.length) STATE.layout.pages.push(newPage());
         // While arranging, guarantee a trailing empty "new page" at the end so
         // an app can always be dragged (or swiped/arrowed) onto a fresh page —
         // just like an iPhone home screen in jiggle mode.
-        if (STATE.editMode && STATE.layout.pages[STATE.layout.pages.length - 1].length > 0)
-          STATE.layout.pages.push([]);
+        if (STATE.editMode && !isPageEmpty(STATE.layout.pages[STATE.layout.pages.length - 1]))
+          STATE.layout.pages.push(newPage());
         clampCurrentPage();
         if (STATE.openFolderId && !findFolderById(STATE.openFolderId)) STATE.openFolderId = null;
       }
@@ -1050,21 +1087,22 @@
       // any bookmark that isn't placed yet, then normalize.
       function syncLayout() {
         if (!STATE.layout || !Array.isArray(STATE.layout.pages)) STATE.layout = { pages: [] };
+        ensureSlots();
         const valid = new Set(STATE.bookmarks.map(b => b.id));
         for (const page of STATE.layout.pages) {
-          for (let i = page.length - 1; i >= 0; i--) {
+          for (let i = 0; i < page.length; i++) {
             const it = page[i];
-            if (it.type === 'app' && !valid.has(it.id)) page.splice(i, 1);
+            if (it && it.type === 'app' && !valid.has(it.id)) page[i] = null;
           }
         }
         normalizeLayout();
         const present = new Set();
         for (const page of STATE.layout.pages) for (const it of page) {
+          if (!it) continue;
           if (it.type === 'app') present.add(it.id);
           else if (it.type === 'folder') it.items.forEach(a => present.add(a.id));
         }
         for (const b of STATE.bookmarks) if (!present.has(b.id)) addAppToLayout(b.id);
-        reflowPages();
         clampCurrentPage();
       }
       function moveAppOutOfFolder(fid, id) {
@@ -1218,7 +1256,7 @@
       function allFolders() {
         const out = [];
         for (const page of STATE.layout.pages)
-          for (const it of page) if (it.type === 'folder') out.push(it);
+          for (const it of page) if (it && it.type === 'folder') out.push(it);
         return out;
       }
 
@@ -2300,11 +2338,12 @@
         if (!url) { showToast('Enter a web address for “' + name + '”', 'triangle-alert'); return; }
         if (!looksLikeUrl(url)) { showToast('That doesn’t look like a web address', 'triangle-alert'); return; }
         if (!name) name = hostCore(url).replace(/^\w/, c => c.toUpperCase());
-        STATE.bookmarks.push({ id: uid(), name, url });
+        const id = uid();
+        STATE.bookmarks.push({ id, name, url });
         persistBookmarks();
         STATE.draftName = ''; STATE.draftUrl = '';
         STATE.adding = false;
-        STATE.currentPage = STATE.layout.pages.length - 1; // show where it landed
+        STATE.currentPage = pageIndexOfApp(id); // show where it landed
         showToast('Added “' + name + '”', 'check');
         render();
       }
@@ -2318,9 +2357,10 @@
           showToast('“' + s.name + '” is already saved', 'info');
           return;
         }
-        STATE.bookmarks.push({ id: uid(), name: s.name, url: s.url });
+        const id = uid();
+        STATE.bookmarks.push({ id, name: s.name, url: s.url });
         persistBookmarks();
-        STATE.currentPage = STATE.layout.pages.length - 1;
+        STATE.currentPage = pageIndexOfApp(id);
         showToast('Added “' + s.name + '”', 'check');
         render();
       }
@@ -2622,13 +2662,12 @@
       }
 
       function renderSpringboard() {
-        const pages = STATE.layout.pages.length ? STATE.layout.pages : [[]];
+        const pages = STATE.layout.pages.length ? STATE.layout.pages : [newPage()];
         clampCurrentPage();
         const edit = STATE.editMode;
         const track = pages.map((page, pi) =>
           `<div class="sb-page" data-sb-page="${pi}" style="width:${100 / pages.length}%">${
-            page.length ? page.map((item, idx) => renderSbCell(item, pi, idx)).join('')
-                        : `<div class="sb-empty-page">No apps here yet.<br>Tap <b>Add</b> up top to add a website.</div>`
+            page.map((item, idx) => item ? renderSbCell(item, pi, idx) : renderEmptySlot(pi, idx)).join('')
           }</div>`).join('');
 
         // Dot strip — page indicators plus, while arranging, a "+" to add a
@@ -2654,13 +2693,20 @@
             </div>
             ${dots}
             <div class="sb-dock">
-              <div class="sb-dock-hint">${edit ? 'Drag to move · drop onto another app to make a folder · drag out of a folder to pull it back · drag to an edge for a new page' : 'Tip: press and hold an app — or tap the pencil up top — to rearrange'}</div>
+              <div class="sb-dock-hint">${edit ? 'Drag an app to any open spot · drop onto another app to make a folder · drag to an edge for a new page' : 'Tip: press and hold an app — or tap the pencil up top — to rearrange'}</div>
             </div>
           </div>`;
       }
 
       function renderSbCell(item, pi, idx) {
         return item.type === 'folder' ? renderFolderCell(item, pi, idx) : renderAppCell(item, pi, idx);
+      }
+
+      // An empty grid slot — invisible when idle, a dashed drop target while
+      // arranging. It mirrors a real cell's footprint so the grid stays aligned
+      // and apps can be dropped into any open position, gaps and all.
+      function renderEmptySlot(pi, idx) {
+        return `<div class="sb-cell sb-slot-empty" data-sb="empty" data-page="${pi}" data-index="${idx}" aria-hidden="true"><div class="sb-tile-ghost"></div><div class="sb-label">&nbsp;</div></div>`;
       }
 
       // The fallback initial — strictly alphanumeric since it's interpolated
@@ -3109,7 +3155,7 @@
       }
 
       function clearDropMarkers() {
-        document.querySelectorAll('.drop-before, .drop-after, .drop-folder').forEach(n => n.classList.remove('drop-before', 'drop-after', 'drop-folder'));
+        document.querySelectorAll('.drop-before, .drop-after, .drop-folder, .drop-slot, .drop-swap').forEach(n => n.classList.remove('drop-before', 'drop-after', 'drop-folder', 'drop-slot', 'drop-swap'));
         document.querySelectorAll('.drop-page').forEach(n => n.classList.remove('drop-page'));
         document.querySelectorAll('.sb-folder-panel.pop-out').forEach(n => n.classList.remove('pop-out'));
       }
@@ -3164,6 +3210,7 @@
         if (e.target.closest('.sb-badge')) return;            // the ×/remove button — let it click
         const cell = e.target.closest('[data-sb]');
         if (!cell) return;
+        if (cell.getAttribute('data-sb') === 'empty') return;  // nothing to lift from a gap
 
         PDRAG.pointerId = e.pointerId;
         PDRAG.cell = cell;
@@ -3288,40 +3335,48 @@
           return;
         }
 
-        // ----- on the springboard -----
-        const cell = el.closest('[data-sb="app"],[data-sb="folder"]');
+        // ----- on the springboard (free grid placement) -----
+        const cell = el.closest('[data-sb="app"],[data-sb="folder"],[data-sb="empty"]');
         if (cell === PDRAG.cell) return;          // hovering our own origin → no-op
         if (cell) {
           const sb = cell.getAttribute('data-sb');
           const page = +cell.getAttribute('data-page');
           const index = +cell.getAttribute('data-index');
+          if (sb === 'empty') {
+            // Drop straight into this open slot — apps stay exactly where placed.
+            DRAG.intent = { kind: 'placeSlot', page, index };
+            cell.classList.add('drop-slot');
+            return;
+          }
           const r = cell.getBoundingClientRect();
           const fx = (x - r.left) / r.width;
-          if (sb === 'folder' && sourceIsApp && fx > 0.24 && fx < 0.76) {
+          if (sb === 'folder' && sourceIsApp && fx > 0.2 && fx < 0.8) {
             DRAG.intent = { kind: 'intoFolder', fid: cell.getAttribute('data-fid') };
             cell.classList.add('drop-folder');
-          } else if (sb === 'app' && sourceIsApp && fx > 0.28 && fx < 0.72) {
+          } else if (sb === 'app' && sourceIsApp && fx > 0.25 && fx < 0.75) {
             DRAG.intent = { kind: 'combine', page, index };
             cell.classList.add('drop-folder');
           } else {
-            const after = fx > 0.5;
-            DRAG.intent = { kind: 'page', page, pos: after ? 'after' : 'before', index };
-            cell.classList.add(after ? 'drop-after' : 'drop-before');
+            // Onto an occupied slot's edge → swap the two so the carried app can
+            // take any spot, even one that's already filled.
+            DRAG.intent = { kind: 'swap', page, index };
+            cell.classList.add('drop-swap');
           }
           return;
         }
+        // Padding / area below the grid → drop into the first open slot on the
+        // page under the pointer (or the one being viewed).
         const pageEl = el.closest('[data-sb-page]');
-        if (pageEl) {
-          DRAG.intent = { kind: 'page', page: +pageEl.getAttribute('data-sb-page'), pos: 'append' };
-          pageEl.classList.add('drop-page');
-          return;
-        }
-        // Anywhere else inside the board (e.g. the empty lower area of a page
-        // that only holds a few apps) → drop onto the page you're viewing.
-        if (el.closest('.sb-viewport')) {
-          DRAG.intent = { kind: 'page', page: STATE.currentPage, pos: 'append' };
-          const pe = document.querySelector('.sb-page[data-sb-page="' + STATE.currentPage + '"]');
-          if (pe) pe.classList.add('drop-page');
+        const pageIdx = pageEl ? +pageEl.getAttribute('data-sb-page')
+                       : (el.closest('.sb-viewport') ? STATE.currentPage : -1);
+        if (pageIdx >= 0) {
+          const p = pageArr(pageIdx);
+          const s = p ? firstEmptySlot(p) : -1;
+          if (s !== -1) {
+            DRAG.intent = { kind: 'placeSlot', page: pageIdx, index: s };
+            const pe = document.querySelector('.sb-page[data-sb-page="' + pageIdx + '"]');
+            if (pe) pe.classList.add('drop-page');
+          }
         }
       }
 
@@ -3332,8 +3387,10 @@
           const src = getSourceRef(PDRAG.loc);
           if (src.item && src.arr) {
             src.arr.splice(src.arr.indexOf(src.item), 1);
-            const page = pageArr(STATE.currentPage) || STATE.layout.pages[STATE.layout.pages.length - 1];
-            if (page) page.push({ type: 'app', id: src.item.id });
+            const cell = { type: 'app', id: src.item.id };
+            const page = pageArr(STATE.currentPage);
+            const s = page ? firstEmptySlot(page) : -1;
+            if (s !== -1) page[s] = cell; else placeInFirstEmpty(cell);
           }
           STATE.openFolderId = null;
         } else {
@@ -3388,37 +3445,70 @@
         const folder = findFolderById(from.fid);
         return folder ? { arr: folder.items, item: folder.items[from.index] } : { arr: null, item: null };
       }
+      // Detach the dragged cell from where it came from. A page is a fixed grid,
+      // so clear the slot (keep the gap); a folder is a packed list, so splice.
+      function removeFromSource(from, src) {
+        if (from.kind === 'page') src.arr[from.index] = null;
+        else src.arr.splice(src.arr.indexOf(src.item), 1);
+      }
 
       function applyDrag(from, intent) {
         const src = getSourceRef(from);
         const item = src.item;
         if (!item || !src.arr) return;
 
-        // Resolve the target (container + reference cell) BEFORE mutating, then
-        // re-find positions by identity afterwards so index shifts don't bite.
-        let targetArr = null, refItem = null;
-        if (intent.kind === 'page') { targetArr = pageArr(intent.page); if (intent.pos !== 'append') refItem = targetArr[intent.index]; }
-        else if (intent.kind === 'combine') { targetArr = pageArr(intent.page); refItem = targetArr[intent.index]; }
-        else if (intent.kind === 'intoFolder') { refItem = findFolderById(intent.fid); }
-        else if (intent.kind === 'folder') { const f = findFolderById(intent.fid); targetArr = f && f.items; if (intent.pos !== 'append') refItem = targetArr[intent.index]; }
-        if (refItem === item) return; // dropped on itself
-
-        src.arr.splice(src.arr.indexOf(item), 1); // detach from source
-
-        if (intent.kind === 'page') {
-          if (!targetArr) return;
-          if (intent.pos === 'append') targetArr.push(item);
-          else { let ti = targetArr.indexOf(refItem); if (ti < 0) ti = targetArr.length; targetArr.splice(intent.pos === 'after' ? ti + 1 : ti, 0, item); }
-        } else if (intent.kind === 'combine') {
-          let ti = targetArr.indexOf(refItem);
-          if (ti < 0) { targetArr.push(item); return; }
-          targetArr.splice(ti, 1, makeFolder(refItem, item));
-        } else if (intent.kind === 'intoFolder') {
-          if (refItem) refItem.items.push(asApp(item));
-        } else if (intent.kind === 'folder') {
-          if (!targetArr) return;
+        // ----- reordering inside an open folder (folders stay packed) -----
+        if (intent.kind === 'folder') {
+          const f = findFolderById(intent.fid);
+          if (!f) return;
+          const targetArr = f.items;
+          const refItem = intent.pos !== 'append' ? targetArr[intent.index] : null;
+          if (refItem === item) return;
+          removeFromSource(from, src);
           if (intent.pos === 'append') targetArr.push(asApp(item));
           else { let ti = targetArr.indexOf(refItem); if (ti < 0) ti = targetArr.length; targetArr.splice(intent.pos === 'after' ? ti + 1 : ti, 0, asApp(item)); }
+          return;
+        }
+
+        // ----- free placement on a page grid -----
+        if (intent.kind === 'placeSlot') {
+          const targetArr = pageArr(intent.page);
+          if (!targetArr) return;
+          if (targetArr[intent.index] && targetArr[intent.index] !== item) return; // slot taken
+          removeFromSource(from, src);
+          targetArr[intent.index] = item;
+          return;
+        }
+        if (intent.kind === 'swap') {
+          const targetArr = pageArr(intent.page);
+          if (!targetArr) return;
+          const targetItem = targetArr[intent.index];
+          if (!targetItem || targetItem === item) return;
+          if (from.kind === 'page') {              // swap two slots (across pages too)
+            src.arr[from.index] = targetItem;
+            targetArr[intent.index] = item;
+          } else {                                 // from a folder: take the slot, re-home the bumped app
+            removeFromSource(from, src);
+            targetArr[intent.index] = item;
+            placeInFirstEmpty(targetItem);
+          }
+          return;
+        }
+        if (intent.kind === 'combine') {
+          const targetArr = pageArr(intent.page);
+          if (!targetArr) return;
+          const refItem = targetArr[intent.index];
+          if (!refItem || refItem === item || refItem.type !== 'app') return;
+          removeFromSource(from, src);
+          targetArr[intent.index] = makeFolder(refItem, item);
+          return;
+        }
+        if (intent.kind === 'intoFolder') {
+          const folder = findFolderById(intent.fid);
+          if (!folder) return;
+          removeFromSource(from, src);
+          folder.items.push(asApp(item));
+          return;
         }
       }
 
