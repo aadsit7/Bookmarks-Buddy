@@ -423,7 +423,7 @@
       .sb-folder-apps .sb-label { color: var(--navy-deep); text-shadow: none; }
       .sb-folder-apps .sb-badge { background: #dc2626; color: #fff; }
 
-      .modal { padding: 22px; }
+      .modal { padding: 22px; max-height: calc(100dvh - 40px); overflow-y: auto; }
       .modal-title { font-size: 18px; font-weight: 800; color: var(--navy-deep); }
       .modal-sub { font-size: 13px; color: var(--n500); margin-top: 6px; line-height: 1.5; }
       .modal-fields { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
@@ -435,6 +435,29 @@
       .modal-confirm .modal-actions { justify-content: center; }
       .modal-ic-del { width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 12px; background: #fee2e2; color: #dc2626; display: grid; place-items: center; }
       .modal-ic-del svg { width: 24px; height: 24px; }
+
+      /* Optional description note + custom thumbnail controls in the add/edit
+         modals. The note feeds the voice matcher; the thumbnail overrides the
+         site favicon. Both are fully optional and degrade to today's behaviour
+         when left blank. */
+      .field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n500); margin: 4px 0 -2px; display: flex; align-items: center; gap: 6px; }
+      .field-label .opt { color: var(--n400); font-weight: 600; letter-spacing: 0; text-transform: none; }
+      .modal-fields textarea {
+        width: 100%; padding: 11px 14px; border: 1.5px solid var(--n200); border-radius: var(--radius-sm);
+        font-size: 14px; font-weight: 500; color: var(--navy-deep); background: #fff; outline: none;
+        transition: border-color 0.16s, box-shadow 0.16s; font-family: inherit; resize: vertical; min-height: 64px; line-height: 1.45;
+      }
+      .modal-fields textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(3,114,255,0.12); }
+      .modal-fields textarea::placeholder { color: var(--n400); font-weight: 500; }
+      .thumb-row { display: flex; align-items: center; gap: 12px; }
+      .thumb-prev { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; display: grid; place-items: center; background: var(--n25); border: 1px solid var(--n200); overflow: hidden; color: var(--primary); font-weight: 800; font-size: 18px; }
+      .thumb-prev img { width: 30px; height: 30px; object-fit: contain; display: block; }
+      .thumb-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+      .thumb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .thumb-actions .btn-ghost { font-size: 12px; padding: 8px 13px; }
+      .thumb-actions .btn-ghost svg { width: 14px; height: 14px; }
+      .thumb-upload { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+      .thumb-upload input[type="file"] { display: none; }
 
       /* Listen tab extras (carried over from the old voice panel) */
       .focus-options { margin-top: 24px; width: 100%; max-width: 420px; padding-top: 16px; border-top: 1px solid var(--divider); }
@@ -663,13 +686,17 @@
 
       const STATE = {
         view: 'home',              // 'home' | 'focus'
-        bookmarks: [],             // { id, name, url }
+        bookmarks: [],             // { id, name, url, notes, icon }
         editingId: null,
         confirmDeleteId: null,
         draftName: '',             // add-form drafts (kept across re-renders)
         draftUrl: '',
+        draftNotes: '',            // optional description note
+        draftIcon: '',             // optional custom thumbnail (URL or data URL)
         editDraftName: '',
         editDraftUrl: '',
+        editDraftNotes: '',        // edit-form description note
+        editDraftIcon: '',         // edit-form custom thumbnail
         settings: { speak: false }, // optional spoken confirmation, off by default
         // iPhone-style home-screen layout. pages[] holds "cells", each either
         // { type:'app', id } or { type:'folder', id, name, items:[{type:'app',id}] }.
@@ -767,7 +794,8 @@
           url: String(x.url || '').trim(),
           folder: x.folder ?? '', page: x.page ?? '', position: x.position ?? '',
           owner: x.owner ?? '', dateAdded: x.dateAdded ?? '',
-          lastOpened: x.lastOpened ?? '', timesOpened: x.timesOpened ?? '', notes: x.notes ?? ''
+          lastOpened: x.lastOpened ?? '', timesOpened: x.timesOpened ?? '',
+          notes: x.notes ?? '', icon: x.icon ?? ''
         };
       }
 
@@ -786,7 +814,8 @@
           dateAdded: row['Date Added'] ?? '',
           lastOpened: row['Last Opened'] ?? '',
           timesOpened: row['Times Opened'] ?? '',
-          notes: row['Notes'] ?? ''
+          notes: row['Notes'] ?? '',
+          icon: row['Icon'] ?? ''
         };
       }
 
@@ -806,7 +835,8 @@
           'Date Added': bm.dateAdded,
           'Last Opened': bm.lastOpened ?? '',
           'Times Opened': bm.timesOpened ?? '',
-          'Notes': bm.notes ?? ''
+          'Notes': bm.notes ?? '',
+          'Icon': bm.icon ?? ''
         };
       }
 
@@ -1180,6 +1210,15 @@
         return h ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(h)}&sz=64` : '';
       }
 
+      // The thumbnail to show for a bookmark: a user-set custom image (URL or
+      // uploaded data URL) wins; otherwise we fall back to the site's favicon.
+      // Used everywhere a bookmark tile/icon is drawn so a custom thumbnail
+      // shows consistently across the springboard, folders, and search.
+      function iconFor(bm) {
+        const custom = String(bm && bm.icon || '').trim();
+        return custom || faviconFor(bm ? bm.url : '');
+      }
+
       // Levenshtein-based 0..1 similarity for short strings (typo tolerance).
       function levenshtein(a, b) {
         a = a || ''; b = b || '';
@@ -1239,6 +1278,23 @@
           for (const hw of hayWords) {
             if (w.length >= 3 && hw.length >= 3) best = Math.max(best, 0.7 * simRatio(w, hw));
           }
+        }
+
+        // The optional description note widens what voice can find: saying
+        // something captured in a bookmark's note ("open my expense report")
+        // resolves it even when the name/host don't contain those words. Scored
+        // a notch below name/host matches and gated on longer words so an
+        // all-day listener doesn't open tabs on ordinary chatter.
+        const notes = normalize(bm.notes);
+        if (notes && q.length >= 3) {
+          if (notes.includes(q)) {
+            const ratio = Math.min(q.length, notes.length) / Math.max(q.length, notes.length);
+            best = Math.max(best, 0.6 + 0.18 * ratio);
+          }
+          const noteWords = notes.split(' ').filter(Boolean);
+          for (const w of qTokens)
+            for (const nw of noteWords)
+              if (w.length >= 4 && nw.length >= 4) best = Math.max(best, 0.6 * simRatio(w, nw));
         }
         return best;
       }
@@ -2339,9 +2395,9 @@
         if (!looksLikeUrl(url)) { showToast('That doesn’t look like a web address', 'triangle-alert'); return; }
         if (!name) name = hostCore(url).replace(/^\w/, c => c.toUpperCase());
         const id = uid();
-        STATE.bookmarks.push({ id, name, url });
+        STATE.bookmarks.push({ id, name, url, notes: STATE.draftNotes.trim(), icon: STATE.draftIcon.trim() });
         persistBookmarks();
-        STATE.draftName = ''; STATE.draftUrl = '';
+        STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = '';
         STATE.adding = false;
         STATE.currentPage = pageIndexOfApp(id); // show where it landed
         showToast('Added “' + name + '”', 'check');
@@ -2385,6 +2441,8 @@
         STATE.confirmDeleteId = null;
         STATE.editDraftName = bm.name;
         STATE.editDraftUrl = bm.url;
+        STATE.editDraftNotes = bm.notes || '';
+        STATE.editDraftIcon = bm.icon || '';
         render();
       }
       function saveEdit(id) {
@@ -2394,6 +2452,8 @@
         if (!looksLikeUrl(url)) { showToast('That doesn’t look like a web address', 'triangle-alert'); return; }
         bm.name = STATE.editDraftName.trim() || hostCore(url).replace(/^\w/, c => c.toUpperCase());
         bm.url = url;
+        bm.notes = STATE.editDraftNotes.trim();
+        bm.icon = STATE.editDraftIcon.trim();
         STATE.editingId = null;
         persistBookmarks();
         showToast('Updated', 'check');
@@ -2637,7 +2697,8 @@
         const matches = STATE.bookmarks.filter(b =>
           normalize(b.name).includes(nq) ||
           normalize(hostCore(b.url)).includes(nq) ||
-          normalize(hostOf(b.url).replace(/\./g, ' ')).includes(nq));
+          normalize(hostOf(b.url).replace(/\./g, ' ')).includes(nq) ||
+          normalize(b.notes).includes(nq));
         if (!matches.length) {
           return `<div class="search-empty"><i data-lucide="search-x"></i><p>No bookmarks match “${escHtml(q)}”.<br>Try a different word, or add it as a new site.</p></div>`;
         }
@@ -2645,7 +2706,7 @@
       }
 
       function renderSearchCard(bm) {
-        const fav = faviconFor(bm.url);
+        const fav = iconFor(bm);
         const letter = appLetter(bm);
         const inner = fav
           ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p)p.textContent='${escAttr(letter)}'">`
@@ -2719,7 +2780,7 @@
         const bm = STATE.bookmarks.find(b => b.id === item.id);
         if (!bm) return '';
         const edit = STATE.editMode;
-        const fav = faviconFor(bm.url);
+        const fav = iconFor(bm);
         const letter = appLetter(bm);
         const tileInner = fav
           ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
@@ -2736,7 +2797,7 @@
         const edit = STATE.editMode;
         const preview = folder.items.slice(0, 9).map(a => {
           const bm = STATE.bookmarks.find(b => b.id === a.id);
-          const fav = bm ? faviconFor(bm.url) : '';
+          const fav = bm ? iconFor(bm) : '';
           return `<span class="sb-mini">${fav ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove()">` : ''}</span>`;
         }).join('');
         return `
@@ -2761,7 +2822,7 @@
         const apps = folder.items.map((a, idx) => {
           const bm = STATE.bookmarks.find(b => b.id === a.id);
           if (!bm) return '';
-          const fav = faviconFor(bm.url);
+          const fav = iconFor(bm);
           const letter = appLetter(bm);
           const tileInner = fav
             ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
@@ -2784,6 +2845,41 @@
                 <button class="sb-folder-close" data-action="close-folder" aria-label="Close folder"><i data-lucide="x"></i></button>
               </div>
               <div class="sb-folder-apps" data-folder-apps="${escAttr(folder.id)}">${apps}</div>
+            </div>
+          </div>`;
+      }
+
+      // First letter fallback for a thumbnail preview built from draft values.
+      function draftLetter(name, url) {
+        return ((name || hostCore(url) || '?').replace(/[^a-z0-9]/ig, '').charAt(0) || '?').toUpperCase();
+      }
+
+      // The small live thumbnail preview shown in the add/edit modals: the
+      // custom image if set, otherwise the site favicon, otherwise a letter.
+      function renderThumbPreview(iconVal, url, letter) {
+        const src = String(iconVal || '').trim() || faviconFor(url);
+        return src
+          ? `<img src="${escAttr(src)}" alt="" onerror="var p=this.parentNode;this.remove();if(p)p.textContent='${escAttr(letter)}'">`
+          : escHtml(letter);
+      }
+
+      // Shared description-note + custom-thumbnail fields used by both the add
+      // and edit modals. Everything here is optional; left blank, the app keeps
+      // its current behaviour (no note, favicon thumbnail).
+      function renderMetaFields(o) {
+        const letter = draftLetter(o.name, o.url);
+        return `
+          <div class="field-label"><i data-lucide="align-left"></i> Description <span class="opt">— optional, helps voice find it</span></div>
+          <textarea id="${o.idNotes}" placeholder="A note about this bookmark — e.g. “work email, open every morning”" autocomplete="off">${escHtml(o.notes)}</textarea>
+          <div class="field-label"><i data-lucide="image"></i> Thumbnail <span class="opt">— optional</span></div>
+          <div class="thumb-row">
+            <div class="thumb-prev" id="${o.idPrev}">${renderThumbPreview(o.icon, o.url, letter)}</div>
+            <div class="thumb-fields">
+              <input type="text" id="${o.idIcon}" placeholder="Image URL (https://…/logo.png)" value="${escAttr(o.icon)}" autocomplete="off">
+              <div class="thumb-actions">
+                <label class="btn-ghost thumb-upload"><i data-lucide="upload"></i> Upload image<input type="file" id="${o.idFile}" accept="image/*"></label>
+                <button type="button" class="btn-ghost" data-action="${o.resetAction}"><i data-lucide="rotate-ccw"></i> Use site icon</button>
+              </div>
             </div>
           </div>`;
       }
@@ -2812,6 +2908,11 @@
               <div class="modal-fields">
                 <input type="text" id="bm-name" placeholder="Name (e.g. Salesforce)" value="${escAttr(STATE.draftName)}" autocomplete="off">
                 <input type="text" id="bm-url" placeholder="Web address (salesforce.com)" value="${escAttr(STATE.draftUrl)}" autocomplete="off">
+                ${renderMetaFields({
+                  idNotes: 'bm-notes', idIcon: 'bm-icon', idFile: 'bm-icon-file', idPrev: 'thumb-prev-add',
+                  resetAction: 'reset-icon-add',
+                  notes: STATE.draftNotes, icon: STATE.draftIcon, name: STATE.draftName, url: STATE.draftUrl
+                })}
               </div>
               ${suggHtml}
               <div class="modal-actions">
@@ -2835,6 +2936,11 @@
               <div class="modal-fields">
                 <input type="text" id="edit-name" data-edit="name" placeholder="Name" value="${escAttr(STATE.editDraftName)}" autocomplete="off">
                 <input type="text" id="edit-url" data-edit="url" placeholder="Web address" value="${escAttr(STATE.editDraftUrl)}" autocomplete="off">
+                ${renderMetaFields({
+                  idNotes: 'edit-notes', idIcon: 'edit-icon', idFile: 'edit-icon-file', idPrev: 'thumb-prev-edit',
+                  resetAction: 'reset-icon-edit',
+                  notes: STATE.editDraftNotes, icon: STATE.editDraftIcon, name: STATE.editDraftName, url: STATE.editDraftUrl
+                })}
               </div>
               <div class="modal-actions">
                 <button class="btn-ghost del-text" data-action="confirm-delete" data-id="${escAttr(bm.id)}"><i data-lucide="trash-2"></i> Delete</button>
@@ -3003,6 +3109,39 @@
       /* ================================================================
        * Events
        * ================================================================ */
+      // Read a chosen image file into a data URL so a custom thumbnail persists
+      // locally (and syncs) without needing a hosted image. Guards type and
+      // size so a stray huge file can't blow past localStorage limits.
+      function readIconFile(file, cb) {
+        if (!file) return;
+        if (!/^image\//.test(file.type || '')) { showToast('Choose an image file', 'triangle-alert'); return; }
+        if (file.size > 1024 * 1024) { showToast('That image is too large — pick one under 1 MB', 'triangle-alert'); return; }
+        const reader = new FileReader();
+        reader.onload = () => cb(String(reader.result || ''));
+        reader.onerror = () => showToast('Could not read that image', 'triangle-alert');
+        reader.readAsDataURL(file);
+      }
+
+      // Wire the optional description note + thumbnail controls for one modal.
+      // Kept generic so the add and edit modals share the exact same behaviour.
+      function bindMetaFields(o) {
+        const notesEl = document.getElementById(o.idNotes);
+        if (notesEl) notesEl.oninput = (e) => o.setNotes(e.target.value);
+
+        const iconEl = document.getElementById(o.idIcon);
+        if (iconEl) iconEl.oninput = (e) => {
+          o.setIcon(e.target.value);
+          const prev = document.getElementById(o.idPrev);
+          if (prev) prev.innerHTML = renderThumbPreview(e.target.value, o.url(), draftLetter(o.name(), o.url()));
+        };
+
+        const fileEl = document.getElementById(o.idFile);
+        if (fileEl) fileEl.onchange = (e) => readIconFile(e.target.files && e.target.files[0], (dataUrl) => {
+          o.setIcon(dataUrl);
+          render();   // re-render so the preview and field reflect the upload
+        });
+      }
+
       function bindEvents() {
         const app = document.getElementById('app');
 
@@ -3043,7 +3182,9 @@
             case 'next-page': gotoPage(STATE.currentPage + 1); break;
             case 'add-page': addBlankPage(); break;
             case 'toggle-edit': STATE.editMode = !STATE.editMode; normalizeLayout(); persistLayout(); render(); break;
-            case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; render(); break;
+            case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = ''; render(); break;
+            case 'reset-icon-add': STATE.draftIcon = ''; render(); break;
+            case 'reset-icon-edit': STATE.editDraftIcon = ''; render(); break;
             case 'add-starter': addStarter(parseInt(target.getAttribute('data-starter'), 10)); break;
             case 'clear-search': STATE.homeSearch = ''; render(); break;
             case 'close-add': STATE.adding = false; render(); break;
@@ -3079,7 +3220,7 @@
           urlEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addBookmark(); } };
         }
 
-        // Inline-edit drafts
+        // Inline-edit drafts (name + url)
         document.querySelectorAll('[data-edit]').forEach(el => {
           el.oninput = (ev) => {
             if (ev.target.getAttribute('data-edit') === 'name') STATE.editDraftName = ev.target.value;
@@ -3089,6 +3230,23 @@
             if (ev.key === 'Enter') { ev.preventDefault(); if (STATE.editingId) saveEdit(STATE.editingId); }
             else if (ev.key === 'Escape') { ev.preventDefault(); cancelEdit(); }
           };
+        });
+
+        // Description note + custom thumbnail — add modal. The note is a plain
+        // draft; the thumbnail URL updates the little preview live, and an
+        // uploaded image is read into a data URL so it persists on this device.
+        bindMetaFields({
+          idNotes: 'bm-notes', idIcon: 'bm-icon', idFile: 'bm-icon-file', idPrev: 'thumb-prev-add',
+          setNotes: v => { STATE.draftNotes = v; },
+          setIcon: v => { STATE.draftIcon = v; },
+          name: () => STATE.draftName, url: () => STATE.draftUrl
+        });
+        // Description note + custom thumbnail — edit modal.
+        bindMetaFields({
+          idNotes: 'edit-notes', idIcon: 'edit-icon', idFile: 'edit-icon-file', idPrev: 'thumb-prev-edit',
+          setNotes: v => { STATE.editDraftNotes = v; },
+          setIcon: v => { STATE.editDraftIcon = v; },
+          name: () => STATE.editDraftName, url: () => STATE.editDraftUrl
         });
 
         // Live folder rename (kept on the folder object as you type).
