@@ -718,6 +718,15 @@
       // ----------------------------------------------------------------
       const CHANGELOG = [
         {
+          version: '2026-06-22d',
+          date: 'Jun 22, 2026',
+          title: 'Hands-free “Hey Buddy” & saved thumbnails',
+          items: [
+            'Once you’ve allowed the microphone, Bookmarks Buddy starts listening on its own when you open it — just say “Hey Buddy” to begin, no tapping the mic first.',
+            'A custom thumbnail image link now saves to your sheet, so it’s still there the next time you open the app on any device.'
+          ]
+        },
+        {
           version: '2026-06-22c',
           date: 'Jun 22, 2026',
           title: 'Say “Hey Buddy” — hands-free wake word',
@@ -2453,6 +2462,30 @@
         render();
       }
 
+      // Hands-free boot. The wake word is meant to "listen all day" so the user
+      // can just say "Hey Buddy" — but recognition only runs once listening is
+      // on, so a cold page (mic off) never hears the wake word and nothing
+      // happens. When the wake word is on AND the microphone was already
+      // granted on a previous visit, start listening automatically so the page
+      // is passively ready for "Hey Buddy" without a manual tap. We only act on
+      // an already-'granted' permission — auto-start never triggers a prompt on
+      // load (a first-time user taps the mic once; future visits are hands-free).
+      let autoStartArmed = false;
+      async function maybeAutoStartListening() {
+        if (autoStartArmed) return;
+        autoStartArmed = true;
+        if (!VOICE.srSupported || !STATE.settings.wakeWord || VOICE.listenOn) return;
+        if (!(navigator.permissions && navigator.permissions.query)) return;
+        try {
+          const st = await navigator.permissions.query({ name: 'microphone' });
+          const wake = () => { if (STATE.settings.wakeWord && !VOICE.listenOn) startListening(); };
+          // Grant the mic now → go hands-free; grant it later (e.g. after the
+          // first manual start) → stay hands-free for subsequent visits.
+          st.onchange = () => { if (st.state === 'granted') wake(); };
+          if (st.state === 'granted') wake();
+        } catch {}
+      }
+
       /* ---------------- transcript plumbing ---------------- */
       const RECENT_FINALS = [];
       function isDuplicateUtterance(text) {
@@ -3965,6 +3998,8 @@
         syncLayout();
         persistLayout();
         render();
+        // Passively listen for "Hey Buddy" when the mic is already granted.
+        maybeAutoStartListening();
         if (!sheetEnabled()) return;
         rebuildSnapshot();
         try { await flushOutbox(); } catch {}
