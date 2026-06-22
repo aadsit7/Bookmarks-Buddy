@@ -318,7 +318,11 @@
       .sb-tile.noimg::after { content: attr(data-letter); font-size: 34px; font-weight: 800; color: var(--primary); }
       .sb-label {
         font-size: 15px; font-weight: 600; color: var(--navy-deep); text-align: center; line-height: 1.2;
-        max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        /* Show the bookmark's full title under each tile. The title wraps onto
+           as many rows as it needs (no clamping or ellipsis) so nothing is ever
+           cut off — readability of the full name matters more than keeping every
+           label to one line. */
+        max-width: 116px; white-space: normal; overflow-wrap: break-word;
         text-shadow: 0 1px 2px rgba(255,255,255,0.7);
       }
 
@@ -591,6 +595,7 @@
         .home-springboard { padding: 14px 12px 26px; }
         .springboard { border-radius: 24px; min-height: 74vh; }
         .sb-page { grid-template-columns: repeat(auto-fill, 98px); gap: 22px 0; padding: 12px 8px 16px; }
+        .sb-label { max-width: 94px; } /* keep wrapped titles inside the narrower mobile columns */
         .sb-arrow { display: none; } /* swipe is the natural gesture on touch */
         .sb-dock-hint { display: none; }
         .vb-hints { display: none; }
