@@ -88,6 +88,7 @@
       .nav-tab svg { width: 15px; height: 15px; }
       .nav-tab:hover { color: #fff; }
       .nav-tab.active { background: #fff; color: var(--navy); }
+      .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); margin-left: -2px; align-self: flex-start; box-shadow: 0 0 0 2px rgba(255,255,255,0.18); }
 
       @keyframes statusPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); } 100% { box-shadow: 0 0 0 7px rgba(16,185,129,0); } }
 
@@ -241,6 +242,21 @@
       .focus-transcript.muted { color: var(--n400); font-weight: 500; font-size: 17px; }
       .focus-transcript .caret { display: inline-block; width: 3px; height: 1em; background: var(--primary); margin-left: 3px; vertical-align: text-bottom; animation: caretBlink 1s step-end infinite; }
       .focus-recent { margin-top: 30px; width: 100%; max-width: 480px; text-align: left; }
+
+      /* ============== What's new (recent updates) ============== */
+      .whatsnew { margin-top: 30px; width: 100%; max-width: 480px; text-align: left; }
+      .whatsnew-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .whatsnew-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); }
+      .whatsnew-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--primary); border-radius: 999px; padding: 3px 8px; }
+      .whatsnew-list { display: flex; flex-direction: column; gap: 10px; }
+      .wn-entry { padding: 13px 15px; border-radius: 14px; background: var(--n25); border: 1px solid var(--n200); }
+      .wn-entry.latest { background: rgba(3,114,255,0.05); border-color: rgba(3,114,255,0.28); }
+      .wn-entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+      .wn-entry-title { font-size: 13.5px; font-weight: 800; color: var(--navy-deep); letter-spacing: -0.01em; }
+      .wn-entry-date { font-size: 11px; font-weight: 600; color: var(--n500); white-space: nowrap; }
+      .wn-bullets { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 4px; }
+      .wn-bullets li { font-size: 12.5px; line-height: 1.4; color: var(--navy-deep); }
+      .wn-bullets li::marker { color: var(--primary); }
 
       /* ================= Toast ================= */
       .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 200; background: var(--navy-deep); color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 13.5px; font-weight: 600; box-shadow: 0 20px 48px rgba(22,31,91,0.32); pointer-events: none; animation: toastIn 0.25s ease-out; max-width: min(92vw, 480px); text-align: center; display: inline-flex; align-items: center; gap: 9px; }
@@ -683,6 +699,54 @@
       // How many cells (apps or folders) fit on one springboard page before it
       // spills onto the next — a 4×3 iPhone-style grid.
       const PAGE_SIZE = 12;
+
+      // ----------------------------------------------------------------
+      // What's new — the running changelog shown in Settings. Newest entry
+      // goes FIRST; the first one is highlighted as the latest update. When
+      // you ship a change, add an entry at the top with a date and a couple
+      // of plain-language bullets and it shows up automatically. The list is
+      // baked into the page (no backend needed) and the "last seen" version
+      // is cached on the device so the NEW badge clears once it's been read.
+      // ----------------------------------------------------------------
+      const CHANGELOG = [
+        {
+          version: '2026-06-22',
+          date: 'Jun 22, 2026',
+          title: 'What’s new in Settings',
+          items: [
+            'Settings now shows the most recent updates so you always know what changed.',
+            'Each release lists a date and a couple of quick highlights.'
+          ]
+        },
+        {
+          version: '2026-06-15',
+          date: 'Jun 15, 2026',
+          title: 'Descriptions, editing & custom thumbnails',
+          items: [
+            'Add a short note to any site and edit a saved bookmark in place.',
+            'Upload your own thumbnail when a site’s favicon isn’t enough.'
+          ]
+        },
+        {
+          version: '2026-06-10',
+          date: 'Jun 10, 2026',
+          title: 'Free-placement springboard',
+          items: [
+            'Drop apps anywhere on the page, iPhone-style, leaving gaps where you like.',
+            'App tiles are larger and easier to tap.'
+          ]
+        },
+        {
+          version: '2026-06-05',
+          date: 'Jun 5, 2026',
+          title: 'Google Sheet sync',
+          items: [
+            'Your bookmarks back up to a Google Sheet and sync across devices.',
+            'Works offline — changes queue up and flush once you’re back online.'
+          ]
+        }
+      ];
+      const LS_CHANGELOG_SEEN = 'bookmarksBuddy.changelogSeen.v1';
 
       const STATE = {
         view: 'home',              // 'home' | 'focus'
@@ -2565,7 +2629,7 @@
                 <i data-lucide="layout-grid"></i> Bookmarks
               </button>
               <button class="nav-tab ${STATE.view === 'focus' ? 'active' : ''}" data-action="go-focus">
-                <i data-lucide="radio"></i> Settings
+                <i data-lucide="radio"></i> Settings${hasUnseenChangelog() ? '<span class="nav-dot" aria-label="New updates"></span>' : ''}
               </button>
             </nav>
           </header>`;
@@ -3017,6 +3081,46 @@
           </div>`;
       }
 
+      // The newest changelog version this device has already seen, used to
+      // show a "New" badge until Settings is opened. Stored locally so it
+      // never depends on the sheet being reachable.
+      function changelogSeen() {
+        try { return localStorage.getItem(LS_CHANGELOG_SEEN) || ''; } catch { return ''; }
+      }
+      function markChangelogSeen() {
+        const latest = CHANGELOG[0] && CHANGELOG[0].version;
+        if (!latest) return;
+        try { localStorage.setItem(LS_CHANGELOG_SEEN, latest); } catch {}
+      }
+      function hasUnseenChangelog() {
+        const latest = CHANGELOG[0] && CHANGELOG[0].version;
+        return !!latest && changelogSeen() !== latest;
+      }
+
+      // The "What's new" panel for Settings: the latest update is highlighted,
+      // with a handful of prior releases listed below, each as a couple of
+      // bullet points.
+      function renderWhatsNew() {
+        if (!CHANGELOG.length) return '';
+        const fresh = hasUnseenChangelog();
+        const entries = CHANGELOG.slice(0, 4).map((e, i) => `
+          <div class="wn-entry ${i === 0 ? 'latest' : ''}">
+            <div class="wn-entry-head">
+              <span class="wn-entry-title">${escHtml(e.title)}</span>
+              <span class="wn-entry-date">${escHtml(e.date)}</span>
+            </div>
+            <ul class="wn-bullets">${(e.items || []).map(it => `<li>${escHtml(it)}</li>`).join('')}</ul>
+          </div>`).join('');
+        return `
+          <div class="whatsnew">
+            <div class="whatsnew-head">
+              <span class="whatsnew-title">What’s new</span>
+              ${fresh ? '<span class="whatsnew-badge">New</span>' : ''}
+            </div>
+            <div class="whatsnew-list">${entries}</div>
+          </div>`;
+      }
+
       function renderRecent(isFocus) {
         const items = VOICE.recentActions;
         return `
@@ -3085,6 +3189,7 @@
                   <span class="switch ${STATE.settings.speak ? 'on' : ''}" role="switch" tabindex="0" aria-checked="${STATE.settings.speak}" data-action="toggle-speak" aria-label="Speak confirmations"></span>
                 </div>
               </div>
+              ${renderWhatsNew()}
               <div class="focus-recent">${renderRecent(true)}</div>
             </div>
           </div>`;
@@ -3157,7 +3262,7 @@
           switch (action) {
             case 'noop': break;
             case 'go-home': STATE.view = 'home'; render(); break;
-            case 'go-focus': STATE.view = 'focus'; render(); break;
+            case 'go-focus': STATE.view = 'focus'; markChangelogSeen(); render(); break;
             case 'toggle-listen': toggleListening(); break;
             case 'add-bookmark': addBookmark(); break;
             case 'save-bookmarks': saveBookmarks(); break;
