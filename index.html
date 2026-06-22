@@ -718,6 +718,16 @@
       // ----------------------------------------------------------------
       const CHANGELOG = [
         {
+          version: '2026-06-22c',
+          date: 'Jun 22, 2026',
+          title: 'Say “Hey Buddy” — hands-free wake word',
+          items: [
+            'Start commands with “Hey Buddy” so it listens all day — even from your other tabs — without opening things on ordinary conversation.',
+            'After “Hey Buddy” you get a few seconds to keep giving commands without repeating it.',
+            'On by default; turn it off in Settings to open on any command like before.'
+          ]
+        },
+        {
           version: '2026-06-22b',
           date: 'Jun 22, 2026',
           title: 'Colorful default icons',
@@ -778,7 +788,10 @@
         editDraftUrl: '',
         editDraftNotes: '',        // edit-form description note
         editDraftIcon: '',         // edit-form custom thumbnail
-        settings: { speak: false }, // optional spoken confirmation, off by default
+        // speak: optional spoken confirmation, off by default. wakeWord: require
+        // "Hey Buddy" before a command so all-day, cross-tab listening ignores
+        // ordinary conversation — on by default for accuracy.
+        settings: { speak: false, wakeWord: true },
         // iPhone-style home-screen layout. pages[] holds "cells", each either
         // { type:'app', id } or { type:'folder', id, name, items:[{type:'app',id}] }.
         // The flat STATE.bookmarks list stays the source of truth (voice uses
@@ -816,7 +829,9 @@
         matchClearId: null,
         toastMessage: '',
         toastIcon: '',
-        toastTimeoutId: null
+        toastTimeoutId: null,
+        armedUntil: 0,             // wake word: commands run un-prefixed until this time
+        armTimerId: null           // refreshes the UI when the armed window lapses
       };
 
       /* ---------------- persistence ---------------- */
@@ -1512,6 +1527,15 @@
       // adjective ("open my favorite site"), so it must not trigger an add.
       const ADD_VERBS = /\b(create a bookmark for|add a bookmark for|save a bookmark for|new bookmark for|add a bookmark|new bookmark|add to (my )?(bookmarks|favorites|favourites)|bookmark|add|save|remember)\b/;
       const STOP_RE = /\b(stop listening|stop the assistant|stop bookmarks buddy|quit listening|turn (it |yourself )?off|go to sleep|that's all|stop now)\b/;
+      // Wake word — when STATE.settings.wakeWord is on, a command is only acted
+      // on if it's prefixed with "Hey Buddy" (or armed by a recent one). This is
+      // the accuracy lever for all-day, cross-tab listening: ordinary talk is
+      // dropped unless the wake word is heard. A generous set of close mishears
+      // ("body", "bud") is allowed since they sit behind "hey/okay" and so can't
+      // fire on their own. Saying the wake word alone arms a short hands-free
+      // window so follow-up commands need no prefix.
+      const WAKE_RE = /\b(?:hey|hi|ok|okay|hello|yo)\s+(?:buddy|buddie|body|bud)\b/;
+      const WAKE_WINDOW_MS = 12000;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
       // Split view — open a page (or two pages) side by side, mirroring the
       // browser tab menu's "Add tab to new split view". The strong form names
@@ -1738,9 +1762,10 @@
 
         if (cmd.kind === 'stop') { stopListening(); return; }
         if (cmd.kind === 'help') {
+          const wakePrefix = STATE.settings.wakeWord ? 'Start with “Hey Buddy,” then ' : 'Say ';
           recordAction({ type: 'info', text: STATE.bookmarks.length
-            ? 'Say “open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side, or “add split screen with YouTube for this tab” to add a site beside one that’s already open. Or “add” a company to save it.'
-            : 'Say “add” and a company name to save your first bookmark, like “add Notion”.' });
+            ? wakePrefix + '“open” and a bookmark or folder, e.g. ' + exampleNames()[0] + '. Name several to open them all (“open games and searches”). Say “split view” and two names — bookmarks or folders — to tile them side by side, or “add split screen with YouTube for this tab” to add a site beside one that’s already open. Or “add” a company to save it.'
+            : wakePrefix + '“add” and a company name to save your first bookmark, like “add Notion”.' });
           announce('Say open and one or more bookmarks or folders, split view and two names to tile them, add a site to a tab that is already open, or add and a company name.');
           renderSoft(); return;
         }
@@ -2403,8 +2428,9 @@
 
         VOICE.listenOn = true;
         VOICE.permissionDenied = false;
+        VOICE.armedUntil = 0;
         startRecognition();
-        showToast('Listening — say “open” or “add” and a name', 'mic');
+        showToast(STATE.settings.wakeWord ? 'Listening — say “Hey Buddy” then a command' : 'Listening — say “open” or “add” and a name', 'mic');
         announce('Listening for commands.');
         render();
       }
@@ -2435,8 +2461,45 @@
         const text = String(raw).trim();
         if (!text || !VOICE.listenOn) return;
         if (isDuplicateUtterance(text)) return;
+
+        // Wake-word gate. With it on, ordinary chatter is ignored: a command
+        // runs only when the utterance carries "Hey Buddy" (everything up to
+        // and including it is stripped), or when a recent wake word has armed a
+        // brief hands-free window so back-to-back commands need no prefix.
+        if (STATE.settings.wakeWord) {
+          const m = text.match(WAKE_RE);
+          if (m) {
+            armWake();
+            const after = text.slice(m.index + m[0].length).trim();
+            if (after) { handleCommand(after); }
+            else {
+              // Just the wake word — acknowledge and wait for the command.
+              showToast('Listening — go ahead', 'mic');
+              announce('Listening, go ahead.');
+              if (STATE.settings.speak) speak('Yes?');
+              renderSoft();
+            }
+            return;
+          }
+          if (Date.now() >= VOICE.armedUntil) return;   // no wake word, not armed
+          armWake();                                     // keep the window alive
+        }
         handleCommand(text);
       }
+
+      // Open (or extend) the hands-free window during which commands run without
+      // the wake word, and schedule a UI refresh for when it lapses so the
+      // "ready" indicator clears.
+      function armWake() {
+        VOICE.armedUntil = Date.now() + WAKE_WINDOW_MS;
+        if (VOICE.armTimerId) clearTimeout(VOICE.armTimerId);
+        VOICE.armTimerId = setTimeout(() => {
+          VOICE.armTimerId = null;
+          if (VOICE.listenOn) renderSoft();
+        }, WAKE_WINDOW_MS + 50);
+        renderSoft();
+      }
+      function wakeArmed() { return Date.now() < VOICE.armedUntil; }
 
       function updateInterim(text) {
         const trimmed = String(text || '').trim();
@@ -2468,14 +2531,21 @@
         return true;
       }
       function transcriptResting(id) {
+        const wake = STATE.settings.wakeWord;
+        const armed = wake && wakeArmed();
         if (id === 'home-transcript') {
           const fn = escHtml(firstSpokenName());
-          return VOICE.listenOn
-            ? 'Listening… say “open ' + fn + '” or “add” a site'
-            : 'Tap to talk, then say “open ' + fn + '”';
+          if (!VOICE.listenOn) return 'Tap to talk, then say “' + (wake ? 'Hey Buddy, open ' + fn : 'open ' + fn) + '”';
+          if (armed) return 'Go ahead… say “open ' + fn + '” or “add” a site';
+          return wake
+            ? 'Listening… say “Hey Buddy, open ' + fn + '”'
+            : 'Listening… say “open ' + fn + '” or “add” a site';
         }
         const isFocus = id === 'focus-transcript';
-        if (VOICE.listenOn) return 'Listening… say “open” or “add” and a name';
+        if (VOICE.listenOn) {
+          if (armed) return 'Go ahead… say “open” or “add” and a name';
+          return wake ? 'Listening… say “Hey Buddy” then a command' : 'Listening… say “open” or “add” and a name';
+        }
         return isFocus ? 'Tap the circle to start listening' : 'Press the mic to start';
       }
 
@@ -3212,16 +3282,24 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? (STATE.settings.wakeWord ? 'Say “Hey Buddy” then a command — “Hey Buddy, open Salesforce”, a folder name to open the group, or “add” a company to save it. After “Hey Buddy” you get a few seconds to keep giving commands hands-free. It keeps listening from other tabs, and the wake word means it won’t open things on ordinary talk.' : 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.') : 'Tap the circle and start talking. Leave it on all day.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
+                ${STATE.settings.wakeWord ? `<span class="vp-chip">${escHtml('“Hey Buddy, open ' + firstSpokenName() + '”')}</span>` : ''}
                 ${exampleNames().map(n => `<span class="vp-chip">${escHtml(n)}</span>`).join('')}
                 ${allFolders()[0] ? `<span class="vp-chip">${escHtml('“Open ' + (allFolders()[0].name || 'folder') + ' folder”')}</span>` : ''}
                 ${splitExampleChip()}
                 <span class="vp-chip">${escHtml('“Add Dropbox”')}</span>
               </div>
               <div class="focus-options">
+                <div class="opt-row">
+                  <div class="opt-text">
+                    <div class="opt-title">Wake word (“Hey Buddy”)</div>
+                    <div class="opt-sub">Only act after you say “Hey Buddy” — so it can listen all day, even from other tabs, without opening things on ordinary talk. Off opens on any command.</div>
+                  </div>
+                  <span class="switch ${STATE.settings.wakeWord ? 'on' : ''}" role="switch" tabindex="0" aria-checked="${STATE.settings.wakeWord}" data-action="toggle-wake" aria-label="Require the Hey Buddy wake word"></span>
+                </div>
                 <div class="opt-row">
                   <div class="opt-text">
                     <div class="opt-title">Speak confirmations</div>
@@ -3321,6 +3399,13 @@
             case 'open-pending-split': openPendingSplit(); break;
             case 'dismiss-pending-split': VOICE.pendingSplit = null; render(); break;
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
+            case 'toggle-wake':
+              STATE.settings.wakeWord = !STATE.settings.wakeWord;
+              VOICE.armedUntil = 0;   // dropping the requirement shouldn't leave a stale armed window
+              persistSettings();
+              showToast(STATE.settings.wakeWord ? 'Wake word on — say “Hey Buddy” first' : 'Wake word off — commands open right away', 'mic');
+              render();
+              break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
             case 'goto-page': gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0); break;
