@@ -1537,7 +1537,12 @@
       // ("body", "bud") is allowed since they sit behind "hey/okay" and so can't
       // fire on their own. Saying the wake word alone arms a short hands-free
       // window so follow-up commands need no prefix.
-      const WAKE_RE = /\b(?:hey|hi|ok|okay|hello|yo)\s+(?:buddy|buddie|body|bud)\b/;
+      // Case-insensitive: this is matched against the RAW transcript (before
+      // parseCommand's normalize lowercases anything), and Chrome returns final
+      // results sentence-cased and punctuated — "Hey Buddy, open Gmail." Without
+      // the /i flag the capital "H"/"B" never matched, so the gate silently
+      // dropped every command and the wake word appeared to do nothing.
+      const WAKE_RE = /\b(?:hey|hi|ok|okay|hello|yo)\s+(?:buddy|buddie|body|bud)\b/i;
       const WAKE_WINDOW_MS = 12000;
       const HELP_RE = /\b(what can you do|what do you do|help me out|show help|list (my )?bookmarks|what are my bookmarks|what bookmarks)\b/;
       // Split view — open a page (or two pages) side by side, mirroring the
