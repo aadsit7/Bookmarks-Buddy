@@ -657,7 +657,9 @@
         token: resolveAppToken(),
         online: true,                   // last known reachability of the sheet
         snapshot: Object.create(null),  // Bookmark ID -> JSON of the row the sheet last had
-        flushing: false                 // guards against overlapping outbox flushes
+        flushing: false,                // guards against overlapping outbox flushes
+        ready: false                    // true once the snapshot is baselined, so
+                                        // boot-time saves don't push before we pull
       };
       function sheetEnabled() { return !!(SHEET.url && SHEET.token); }
 
@@ -717,6 +719,15 @@
       // is cached on the device so the NEW badge clears once it's been read.
       // ----------------------------------------------------------------
       const CHANGELOG = [
+        {
+          version: '2026-06-22e',
+          date: 'Jun 22, 2026',
+          title: 'Your layout now follows you across devices',
+          items: [
+            'Folders, pages, and exactly where each site sits now sync through your Google Sheet — open the app on another device and your home screen is arranged the same way.',
+            'Listening starts more reliably the moment you click the mic or press Ctrl+Alt+B, even right after stopping.'
+          ]
+        },
         {
           version: '2026-06-22d',
           date: 'Jun 22, 2026',
@@ -842,14 +853,15 @@
       }
       function persistBookmarks() {
         try {
+          // Save the list to the local mirror first so the offline copy is
+          // never lost, even if the steps below hiccup. Then keep the
+          // springboard layout in step with the bookmark list (new ones get
+          // placed, deleted ones pruned); persistLayout() stamps each
+          // bookmark's folder/page/position, saves again, and mirrors
+          // everything up to the Google Sheet.
           persistBookmarksLocal();
-          // Keep the springboard layout in step with the bookmark list (new
-          // ones get placed, deleted ones get pruned) and save it too.
           syncLayout();
           persistLayout();
-          // Mirror the change up to the Google Sheet (queued; a no-op when no
-          // app_token is set). Never let a sync hiccup fail the local save.
-          try { syncSheet(); } catch {}
           return true;
         }
         catch { return false; }
@@ -866,8 +878,20 @@
           if (l && Array.isArray(l.pages)) STATE.layout = l;
         } catch {}
       }
+      // Persist the springboard arrangement. Beyond saving the layout object to
+      // localStorage, this stamps the folder / page / position of every
+      // bookmark and mirrors the whole thing up to the Google Sheet, so the
+      // arrangement — not just the list of sites — follows the user to any
+      // device. Every layout change (drag, folder rename, page move, add,
+      // delete) flows through here, so cross-device placement stays in step.
       function persistLayout() {
         try { localStorage.setItem(LS_LAYOUT, JSON.stringify(STATE.layout)); } catch {}
+        writeLayoutToBookmarks();
+        persistBookmarksLocal();
+        // Mirror the change up to the Google Sheet (queued; a no-op when no
+        // app_token is set, and gated until the first sync has baselined the
+        // snapshot). Never let a sync hiccup fail the local save.
+        try { syncSheet(); } catch {}
       }
 
       /* ================================================================
@@ -915,13 +939,18 @@
       // metadata the app doesn't manage is passed through untouched.
       function toSheetRow(bm) {
         if (!bm.dateAdded) bm.dateAdded = new Date().toISOString();
+        // Page/Position can arrive from the sheet as numbers or strings; coerce
+        // both to a canonical string here (used for outgoing rows AND the
+        // snapshot baseline) so a number-vs-string mismatch never looks like a
+        // change and triggers a needless re-save on every sync.
+        const cell = v => (v == null || v === '' ? '' : String(v));
         return {
           'Bookmark ID': bm.id,
           'Name': bm.name || '',
           'URL': bm.url || '',
           'Folder': bm.folder ?? '',
-          'Page': bm.page ?? '',
-          'Position': bm.position ?? '',
+          'Page': cell(bm.page),
+          'Position': cell(bm.position),
           'Owner (Profile ID)': bm.owner ?? '',
           'Date Added': bm.dateAdded,
           'Last Opened': bm.lastOpened ?? '',
@@ -1021,7 +1050,7 @@
       // new rows queue a save, vanished ids queue a delete. Cheap, idempotent,
       // and a no-op without a token — safe to call after any change.
       function syncSheet() {
-        if (!sheetEnabled()) return;
+        if (!sheetEnabled() || !SHEET.ready) return;
         const seen = new Set();
         for (const bm of STATE.bookmarks) {
           seen.add(bm.id);
@@ -1099,7 +1128,10 @@
         // saves for any preserved local-only bookmarks (and nothing else).
         SHEET.snapshot = Object.create(null);
         for (const b of remote) SHEET.snapshot[b.id] = JSON.stringify(toSheetRow(b));
-        syncLayout();
+        SHEET.ready = true;
+        // Rebuild the springboard from the placement the sheet carried, so the
+        // arrangement — pages, slots, folders — is restored on this device too.
+        buildLayoutFromBookmarks();
         persistLayout();
         render();
         syncSheet();      // push up local-only bookmarks (no-op in steady state)
@@ -1236,6 +1268,84 @@
         if (idx < 0) return;
         f.items.splice(idx, 1);
         addAppToLayout(id);
+      }
+
+      /* ================================================================
+       * Layout <-> sheet bridge — encode the springboard arrangement into
+       * each bookmark's Folder / Page / Position fields so it travels through
+       * the Google Sheet and is rebuilt verbatim on every other device.
+       *
+       * Encoding (kept human-readable in the sheet):
+       *   • Page     = 1-based page number the cell sits on.
+       *   • Position = the slot index (0..PAGE_SIZE-1) for an app sitting
+       *                directly on a page; "F<folderSlot>:<indexInFolder>"
+       *                for an app living inside a folder.
+       *   • Folder   = the folder's name (blank for an app on the page).
+       * ================================================================ */
+      // Stamp folder/page/position onto every bookmark from the current layout.
+      function writeLayoutToBookmarks() {
+        const byId = Object.create(null);
+        for (const b of STATE.bookmarks) byId[b.id] = b;
+        const placed = new Set();
+        const pages = (STATE.layout && STATE.layout.pages) || [];
+        for (let p = 0; p < pages.length; p++) {
+          const page = pages[p];
+          for (let s = 0; s < page.length; s++) {
+            const it = page[s];
+            if (!it) continue;
+            if (it.type === 'app') {
+              const b = byId[it.id];
+              if (b) { b.folder = ''; b.page = p + 1; b.position = s; placed.add(b.id); }
+            } else if (it.type === 'folder') {
+              for (let k = 0; k < it.items.length; k++) {
+                const b = byId[it.items[k].id];
+                if (b) { b.folder = it.name || 'Folder'; b.page = p + 1; b.position = 'F' + s + ':' + k; placed.add(b.id); }
+              }
+            }
+          }
+        }
+        // Anything not represented in the layout gets its placement cleared so a
+        // stale page/slot doesn't linger in the sheet.
+        for (const b of STATE.bookmarks) if (!placed.has(b.id)) { b.folder = ''; b.page = ''; b.position = ''; }
+      }
+
+      // Rebuild STATE.layout from the bookmarks' Folder/Page/Position fields
+      // (as synced from the sheet). Anything without a valid placement — new
+      // sites added on another device, or first-run local-only ones — is left
+      // for syncLayout() to drop into the first open slot.
+      function buildLayoutFromBookmarks() {
+        const pages = [];
+        const ensurePage = (p) => { while (pages.length <= p) pages.push(newPage()); return pages[p]; };
+        const folderAt = Object.create(null); // "page:slot" -> folder cell
+        for (const b of STATE.bookmarks) {
+          const p = parseInt(b.page, 10);
+          const pos = String(b.position == null ? '' : b.position).trim();
+          if (!Number.isInteger(p) || p < 1 || pos === '') continue;
+          const fm = pos.match(/^F(\d+):(\d+)$/);
+          if (fm) {
+            const slot = parseInt(fm[1], 10), idx = parseInt(fm[2], 10);
+            if (slot < 0 || slot >= PAGE_SIZE) continue;
+            const key = (p - 1) + ':' + slot;
+            let f = folderAt[key];
+            if (!f) {
+              f = { type: 'folder', id: 'f' + uid(), name: String(b.folder || 'Folder'), items: [] };
+              folderAt[key] = f;
+              ensurePage(p - 1)[slot] = f;
+            }
+            f.items[idx] = { type: 'app', id: b.id }; // by index, to preserve order
+          } else {
+            const slot = parseInt(pos, 10);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= PAGE_SIZE) continue;
+            const page = ensurePage(p - 1);
+            if (page[slot]) continue; // collision — let syncLayout re-home it
+            page[slot] = { type: 'app', id: b.id };
+          }
+        }
+        // Compact folder item arrays (a missing index leaves a hole).
+        for (const key in folderAt) folderAt[key].items = folderAt[key].items.filter(Boolean);
+        STATE.layout = { pages: pages.length ? pages : [newPage()] };
+        // Place anything still unplaced and tidy folders (<2 items dissolve).
+        syncLayout();
       }
 
       /* ---------------- escaping ---------------- */
@@ -2332,25 +2442,39 @@
           VOICE.srRunning = false;
           VOICE.lastSrEventAt = Date.now();
           if (!VOICE.wantRunning || !recognitionWanted()) return;
-          // start() can throw while the previous session tears down — retry.
-          const tryStart = (n) => {
-            if (!VOICE.wantRunning || !recognitionWanted()) return;
-            try { startRecognitionNow(); }
-            catch { if (n < 4) setTimeout(() => tryStart(n + 1), 250 * (n + 1)); }
-          };
-          tryStart(0);
+          kickRecognition(); // restart so listening keeps going all day
         };
         VOICE.recognition = r;
         return r;
       }
 
-      function startRecognitionNow() { const r = ensureRecognition(); if (r) r.start(); }
+      // Single resilient entry point for (re)starting the recognizer. Chrome
+      // throws a synchronous InvalidStateError in two cases that used to leave
+      // listening silently dead until the 5s watchdog noticed:
+      //   • "already started" — a session is (or is about to be) running, so
+      //     this is success: leave it be.
+      //   • the previous session is still tearing down — retry on a short
+      //     backoff instead of swallowing the error and waiting for the watchdog.
+      // This is what makes clicking the button / pressing the shortcut start
+      // listening promptly and reliably, even right after stopping.
+      function kickRecognition(attempt = 0) {
+        if (!VOICE.wantRunning || !recognitionWanted()) return;
+        if (VOICE.srRunning) return;
+        const r = ensureRecognition();
+        if (!r) return;
+        try {
+          r.start();
+        } catch (err) {
+          if (err && /already started/i.test(err.message || '')) return;
+          if (attempt < 8) setTimeout(() => kickRecognition(attempt + 1), 200 * (attempt + 1));
+        }
+      }
 
       function startRecognition() {
         const r = ensureRecognition();
         if (!r) return;
         VOICE.wantRunning = true;
-        try { startRecognitionNow(); } catch {}
+        kickRecognition();
         startWatchdog();
       }
 
@@ -2363,7 +2487,7 @@
         if (VOICE.watchdogId) return;
         VOICE.watchdogId = setInterval(() => {
           if (!VOICE.wantRunning || !recognitionWanted()) return;
-          if (!VOICE.srRunning) { try { startRecognitionNow(); } catch {} return; }
+          if (!VOICE.srRunning) { kickRecognition(); return; }
           if (Date.now() - VOICE.lastSrEventAt > SR_STALL_MS) { try { VOICE.recognition.abort(); } catch {} }
         }, 5000);
       }
@@ -2374,7 +2498,7 @@
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         if (VOICE.wantRunning && recognitionWanted() && !VOICE.srRunning) {
-          try { startRecognitionNow(); } catch {}
+          kickRecognition();
         }
       });
 
@@ -3886,6 +4010,7 @@
         render();
         if (!sheetEnabled()) return;
         rebuildSnapshot();
+        SHEET.ready = true;   // snapshot baselined — saves may push from here on
         try { await flushOutbox(); } catch {}
         await syncFromSheet();
       }
