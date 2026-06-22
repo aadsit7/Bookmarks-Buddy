@@ -932,7 +932,10 @@
           'Last Opened': bm.lastOpened ?? '',
           'Times Opened': bm.timesOpened ?? '',
           'Notes': bm.notes ?? '',
-          'Icon': bm.icon ?? ''
+          // Mirror a hosted image URL up to the sheet so the same thumbnail
+          // follows the user to any device. An uploaded image (a large data:
+          // URL) stays on this device — it won't fit a sheet cell.
+          'Icon': /^https?:\/\//i.test(String(bm.icon || '').trim()) ? String(bm.icon).trim() : ''
         };
       }
 
