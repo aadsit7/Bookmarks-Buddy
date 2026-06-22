@@ -314,8 +314,9 @@
       }
       .sb-tile:hover, .sb-folder:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(60,64,80,0.22), 0 2px 6px rgba(60,64,80,0.12); }
       .sb-tile img { width: 50px; height: 50px; display: block; -webkit-user-drag: none; user-drag: none; pointer-events: none; }
-      .sb-tile .sb-letter { font-size: 34px; font-weight: 800; color: var(--primary); }
-      .sb-tile.noimg::after { content: attr(data-letter); font-size: 34px; font-weight: 800; color: var(--primary); }
+      .sb-tile .sb-letter { font-size: 34px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+      .sb-tile.noimg { background: var(--primary); }
+      .sb-tile.noimg::after { content: attr(data-letter); font-size: 34px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.25); }
       .sb-label {
         font-size: 15px; font-weight: 600; color: var(--navy-deep); text-align: center; line-height: 1.2;
         /* Show the bookmark's full title under each tile. The title wraps onto
@@ -471,6 +472,7 @@
       .modal-fields textarea::placeholder { color: var(--n400); font-weight: 500; }
       .thumb-row { display: flex; align-items: center; gap: 12px; }
       .thumb-prev { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; display: grid; place-items: center; background: var(--n25); border: 1px solid var(--n200); overflow: hidden; color: var(--primary); font-weight: 800; font-size: 18px; }
+      .thumb-prev.noimg { color: #fff; border-color: transparent; text-shadow: 0 1px 3px rgba(0,0,0,0.25); }
       .thumb-prev img { width: 30px; height: 30px; object-fit: contain; display: block; }
       .thumb-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
       .thumb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -562,6 +564,7 @@
       .src-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1.5px solid var(--n200); border-radius: 14px; background: #fff; cursor: pointer; transition: border-color .14s, box-shadow .14s; }
       .src-card:hover { border-color: var(--primary); box-shadow: var(--shadow-card); }
       .src-fav { width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center; background: var(--n25); border: 1px solid var(--n200); overflow: hidden; color: var(--primary); font-weight: 800; font-size: 16px; }
+      .src-fav.noimg { color: #fff; border-color: transparent; text-shadow: 0 1px 3px rgba(0,0,0,0.25); }
       .src-fav img { width: 22px; height: 22px; }
       .src-meta { flex: 1; min-width: 0; }
       .src-name { font-size: 14px; font-weight: 700; color: var(--navy-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -714,6 +717,15 @@
       // is cached on the device so the NEW badge clears once it's been read.
       // ----------------------------------------------------------------
       const CHANGELOG = [
+        {
+          version: '2026-06-22b',
+          date: 'Jun 22, 2026',
+          title: 'Colorful default icons',
+          items: [
+            'Sites without a logo now get a bright, colorful tile with their initial instead of a plain gray one.',
+            'Each site keeps its own consistent color across the home screen, folders, and search.'
+          ]
+        },
         {
           version: '2026-06-22',
           date: 'Jun 22, 2026',
@@ -1286,6 +1298,20 @@
       function iconFor(bm) {
         const custom = String(bm && bm.icon || '').trim();
         return custom || faviconFor(bm ? bm.url : '');
+      }
+
+      // A deterministic, vibrant gradient used to give bookmarks that have no
+      // usable image a distinct, colorful tile instead of a plain gray letter.
+      // The seed (name or URL) hashes to a stable hue, so a given site always
+      // gets the same color across the springboard, folders, and search. The
+      // output is fixed-format (only hsl numbers) and contains no quotes, so it
+      // is safe to drop straight into an inline style or onerror handler.
+      function iconGradient(seed) {
+        const s = String(seed || '?');
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+        const hue = (h >>> 0) % 360;
+        return `linear-gradient(135deg, hsl(${hue},72%,60%), hsl(${(hue + 42) % 360},70%,47%))`;
       }
 
       // Levenshtein-based 0..1 similarity for short strings (typo tolerance).
@@ -2777,12 +2803,14 @@
       function renderSearchCard(bm) {
         const fav = iconFor(bm);
         const letter = appLetter(bm);
+        const grad = iconGradient(bm.name || bm.url);
         const inner = fav
-          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p)p.textContent='${escAttr(letter)}'">`
+          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.textContent='${escAttr(letter)}';p.classList.add('noimg');p.style.background='${grad}';}">`
           : escHtml(letter);
+        const favStyle = fav ? '' : ` style="background:${grad}"`;
         return `
           <div class="src-card" data-action="open-bookmark" data-id="${escAttr(bm.id)}" title="Open ${escAttr(bm.name)}">
-            <div class="src-fav">${inner}</div>
+            <div class="src-fav${fav ? '' : ' noimg'}"${favStyle}>${inner}</div>
             <div class="src-meta">
               <div class="src-name">${escHtml(bm.name || hostCore(bm.url))}</div>
               <div class="src-host">${escHtml(hostOf(bm.url) || bm.url)}</div>
@@ -2851,13 +2879,15 @@
         const edit = STATE.editMode;
         const fav = iconFor(bm);
         const letter = appLetter(bm);
+        const grad = iconGradient(bm.name || bm.url);
         const tileInner = fav
-          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
+          ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');p.style.background='${grad}';}">`
           : `<span class="sb-letter">${escHtml(letter)}</span>`;
+        const tileStyle = fav ? '' : ` style="background:${grad}"`;
         return `
           <div class="sb-cell" data-sb="app" data-page="${pi}" data-index="${idx}" data-id="${escAttr(bm.id)}">
             ${edit ? `<button class="sb-badge" data-action="confirm-delete" data-id="${escAttr(bm.id)}" title="Delete" aria-label="Delete ${escAttr(bm.name)}"><i data-lucide="x"></i></button>` : ''}
-            <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
+            <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}"${tileStyle}>${tileInner}</div>
             <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
           </div>`;
       }
@@ -2867,7 +2897,10 @@
         const preview = folder.items.slice(0, 9).map(a => {
           const bm = STATE.bookmarks.find(b => b.id === a.id);
           const fav = bm ? iconFor(bm) : '';
-          return `<span class="sb-mini">${fav ? `<img src="${escAttr(fav)}" alt="" onerror="this.remove()">` : ''}</span>`;
+          const grad = bm ? iconGradient(bm.name || bm.url) : '';
+          return fav
+            ? `<span class="sb-mini"><img src="${escAttr(fav)}" alt="" onerror="this.remove();if(this.parentNode)this.parentNode.style.background='${grad}'"></span>`
+            : `<span class="sb-mini"${grad ? ` style="background:${grad}"` : ''}></span>`;
         }).join('');
         return `
           <div class="sb-cell" data-sb="folder" data-page="${pi}" data-index="${idx}" data-fid="${escAttr(folder.id)}">
@@ -2893,13 +2926,15 @@
           if (!bm) return '';
           const fav = iconFor(bm);
           const letter = appLetter(bm);
+          const grad = iconGradient(bm.name || bm.url);
           const tileInner = fav
-            ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');}">`
+            ? `<img src="${escAttr(fav)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.classList.add('noimg');p.setAttribute('data-letter','${escAttr(letter)}');p.style.background='${grad}';}">`
             : `<span class="sb-letter">${escHtml(letter)}</span>`;
+          const tileStyle = fav ? '' : ` style="background:${grad}"`;
           return `
             <div class="sb-cell" data-sb="fapp" data-fid="${escAttr(folder.id)}" data-index="${idx}" data-id="${escAttr(bm.id)}">
               ${edit ? `<button class="sb-badge" data-action="remove-from-folder" data-fid="${escAttr(folder.id)}" data-id="${escAttr(bm.id)}" title="Move out of folder" aria-label="Move ${escAttr(bm.name)} out of folder"><i data-lucide="x"></i></button>` : ''}
-              <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}">${tileInner}</div>
+              <div class="sb-tile" data-action="${edit ? 'edit-bookmark' : 'open-bookmark'}" data-id="${escAttr(bm.id)}" title="${escAttr(bm.name)}"${tileStyle}>${tileInner}</div>
               <div class="sb-label">${escHtml(bm.name || hostCore(bm.url))}</div>
             </div>`;
         }).join('');
@@ -2927,8 +2962,9 @@
       // custom image if set, otherwise the site favicon, otherwise a letter.
       function renderThumbPreview(iconVal, url, letter) {
         const src = String(iconVal || '').trim() || faviconFor(url);
+        const grad = iconGradient(url || letter);
         return src
-          ? `<img src="${escAttr(src)}" alt="" onerror="var p=this.parentNode;this.remove();if(p)p.textContent='${escAttr(letter)}'">`
+          ? `<img src="${escAttr(src)}" alt="" onerror="var p=this.parentNode;this.remove();if(p){p.textContent='${escAttr(letter)}';p.classList.add('noimg');p.style.background='${grad}';}">`
           : escHtml(letter);
       }
 
