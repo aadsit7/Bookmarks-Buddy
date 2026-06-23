@@ -423,6 +423,63 @@
       .sb-edit-btn.on { background: var(--navy); color: #fff; }
       .sb-dock-hint { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--n500); text-align: center; }
 
+      /* ================= Page side menu (the "Pages" rail) =================
+         A slim list of every springboard page down the left of the Bookmarks
+         screen: tap a name to jump to that page, and — while arranging — rename
+         a page or nudge it earlier/later so the order is yours. On a phone it
+         slides in as a drawer over the board; on a wide screen it sits beside
+         it, always in view. */
+      .sb-layout { flex: 1; min-height: 0; display: flex; gap: 16px; align-items: stretch; position: relative; }
+      .sb-layout .springboard { flex: 1; min-width: 0; }
+
+      .page-nav {
+        flex: 0 0 212px; display: flex; flex-direction: column; min-height: 0;
+        border-radius: 22px; border: 1px solid var(--n200); overflow: hidden;
+        background: linear-gradient(180deg, #ffffff, #f7f8fb);
+        box-shadow: var(--shadow-card);
+      }
+      .sb-layout:not(.nav-open) .page-nav { display: none; }
+      .page-nav-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px; }
+      .page-nav-title { flex: 1; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n500); }
+      .page-nav-addbtn { width: 28px; height: 28px; border-radius: 9px; border: none; cursor: pointer; display: grid; place-items: center; background: rgba(22,31,91,0.06); color: var(--navy-deep); transition: background .14s, transform .12s; }
+      .page-nav-addbtn:hover { background: rgba(22,31,91,0.12); }
+      .page-nav-addbtn:active { transform: scale(.92); }
+      .page-nav-addbtn svg { width: 16px; height: 16px; }
+      .page-nav-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 4px; list-style: none; margin: 0; }
+
+      /* A page row when simply navigating */
+      .page-nav-link { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 12px; border: none; cursor: pointer; background: transparent; color: var(--navy-deep); font-family: inherit; font-size: 13.5px; font-weight: 600; transition: background .14s, color .14s; }
+      .page-nav-link:hover { background: var(--quote); }
+      .page-nav-link.active { background: var(--primary); color: #fff; }
+      .page-nav-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .page-nav-count { font-size: 11px; font-weight: 700; opacity: .65; flex-shrink: 0; }
+      .page-nav-link.active .page-nav-count { opacity: .9; }
+
+      /* A page row while arranging — rename field + reorder nudgers */
+      .page-nav-item { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border-radius: 12px; background: var(--n25); border: 1px solid var(--n200); }
+      .page-nav-item.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(3,114,255,0.14); }
+      .page-nav-item input { flex: 1; min-width: 0; padding: 7px 9px; border-radius: 9px; border: 1.5px solid var(--n200); font-size: 13px; font-weight: 600; }
+      .page-nav-reorder { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+      .page-nav-move { width: 24px; height: 16px; border: none; border-radius: 6px; cursor: pointer; display: grid; place-items: center; background: rgba(22,31,91,0.06); color: var(--navy-deep); transition: background .12s, color .12s; }
+      .page-nav-move:hover:not(:disabled) { background: rgba(22,31,91,0.16); color: var(--primary); }
+      .page-nav-move:disabled { opacity: .3; cursor: default; }
+      .page-nav-move svg { width: 13px; height: 13px; }
+
+      .page-nav-foot { padding: 8px; border-top: 1px solid var(--n200); }
+      .page-nav-edit { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; border-radius: 11px; border: none; cursor: pointer; background: rgba(22,31,91,0.06); color: var(--navy-deep); font-family: inherit; font-size: 12.5px; font-weight: 700; transition: background .14s; }
+      .page-nav-edit:hover { background: rgba(22,31,91,0.12); }
+      .page-nav-edit.on { background: var(--navy); color: #fff; }
+      .page-nav-edit svg { width: 15px; height: 15px; }
+
+      /* The toggle that shows/hides the rail, sitting in the home action bar */
+      .home-pages-btn { width: 44px; height: 44px; border-radius: 14px; border: none; cursor: pointer; flex-shrink: 0; display: grid; place-items: center; background: rgba(22,31,91,0.06); color: var(--navy-deep); transition: background .14s, transform .12s, color .14s; }
+      .home-pages-btn:hover { background: rgba(22,31,91,0.12); }
+      .home-pages-btn:active { transform: scale(.95); }
+      .home-pages-btn.on { background: var(--navy); color: #fff; }
+      .home-pages-btn svg { width: 20px; height: 20px; }
+
+      .page-nav-backdrop { display: none; }
+
       /* Overlays: folder view + add/edit/delete modals */
       .sb-overlay { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 20px; }
       .sb-overlay-bg { position: absolute; inset: 0; background: rgba(22,31,91,0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
@@ -609,6 +666,19 @@
         .onboard-hero { padding: 32px 22px 30px; }
         .onboard-title { font-size: 23px; }
       }
+      /* On narrower screens the Pages rail becomes a slide-in drawer over the
+         board (toggled from the action bar) rather than stealing grid width. */
+      @media (max-width: 820px) {
+        .page-nav {
+          position: absolute; top: 0; bottom: 0; left: 0; width: 232px; z-index: 9;
+          border-radius: 0 18px 18px 0;
+          transform: translateX(-112%); transition: transform .26s var(--ease);
+          box-shadow: 0 20px 50px rgba(22,31,91,0.28);
+        }
+        .sb-layout:not(.nav-open) .page-nav { display: flex; }   /* keep it mounted, just parked off-screen */
+        .sb-layout.nav-open .page-nav { transform: translateX(0); }
+        .sb-layout.nav-open .page-nav-backdrop { display: block; position: absolute; inset: 0; z-index: 8; background: rgba(22,31,91,0.18); -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px); }
+      }
     </style>
   </head>
   <body>
@@ -720,6 +790,16 @@
       // ----------------------------------------------------------------
       const CHANGELOG = [
         {
+          version: '2026-06-23',
+          date: 'Jun 23, 2026',
+          title: 'Name your pages — and a Pages menu to jump between them',
+          items: [
+            'Give each home-screen page a name, then use the new Pages list on the left to jump straight to any one.',
+            'While arranging, rename a page or nudge it earlier or later with the ↑/↓ buttons to set the order — and your page names sync across devices too.',
+            'By voice, say “next page”, “go to page 2”, or “go to Work” to switch pages hands-free.'
+          ]
+        },
+        {
           version: '2026-06-22e',
           date: 'Jun 22, 2026',
           title: 'Your layout now follows you across devices',
@@ -804,8 +884,13 @@
         // { type:'app', id } or { type:'folder', id, name, items:[{type:'app',id}] }.
         // The flat STATE.bookmarks list stays the source of truth (voice uses
         // it); the layout just arranges those same bookmarks into pages/folders.
-        layout: { pages: [] },
+        // pages[] holds the slot arrays; pageNames[] is a parallel list of the
+        // (optional) custom name for each page, indexed identically.
+        layout: { pages: [], pageNames: [] },
         currentPage: 0,
+        // The left "Pages" rail. Open by default on a wide screen, tucked away
+        // on a phone where it slides in as a drawer.
+        pageNavOpen: !(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 820px)').matches),
         editMode: false,           // "jiggle" mode for rearranging
         openFolderId: null,        // folder whose overlay is open, if any
         adding: false,             // add-website modal open
@@ -875,7 +960,10 @@
       function loadLayout() {
         try {
           const l = JSON.parse(localStorage.getItem(LS_LAYOUT) || 'null');
-          if (l && Array.isArray(l.pages)) STATE.layout = l;
+          if (l && Array.isArray(l.pages)) {
+            if (!Array.isArray(l.pageNames)) l.pageNames = [];
+            STATE.layout = l;
+          }
         } catch {}
       }
       // Persist the springboard arrangement. Beyond saving the layout object to
@@ -1154,6 +1242,51 @@
       function isPageEmpty(p) { return !p.some(s => s); }
       function firstEmptySlot(p) { const i = p.indexOf(null); return i; }
       function pageArr(i) { return STATE.layout.pages[i]; }
+
+      /* ---- page names (parallel to STATE.layout.pages) ----
+       * Each page can carry an optional custom name; the names live in a
+       * parallel array indexed exactly like pages[], so the two are reordered,
+       * filtered and rebuilt in lockstep. An empty name just shows "Page N". */
+      function pageNamesArr() {
+        if (!Array.isArray(STATE.layout.pageNames)) STATE.layout.pageNames = [];
+        return STATE.layout.pageNames;
+      }
+      function hasPageName(n) { return !!(n && String(n).trim()); }
+      function pageNameRaw(i) { const n = pageNamesArr()[i]; return n == null ? '' : String(n); }
+      // What the rail / springboard show for a page: the custom name, or a
+      // sensible "Page N" default when it has none.
+      function pageDisplayName(i) { return hasPageName(pageNameRaw(i)) ? pageNameRaw(i).trim() : ('Page ' + (i + 1)); }
+      // Keep the names array the same length as pages[] (pad new trailing pages
+      // with '', drop names for pages that no longer exist). Index-shifting
+      // removals are handled where they happen, so this only ever pads/trims
+      // the tail.
+      function normalizePageNames() {
+        const pages = STATE.layout.pages || [];
+        const names = pageNamesArr();
+        while (names.length < pages.length) names.push('');
+        if (names.length > pages.length) names.length = pages.length;
+        for (let i = 0; i < names.length; i++) names[i] = names[i] == null ? '' : String(names[i]);
+      }
+      // Move a page one step earlier (toward the first/default page) or later,
+      // carrying its name and keeping the viewed page following the moved one.
+      function movePage(i, dir) {
+        const pages = STATE.layout.pages, names = pageNamesArr();
+        const j = i + dir;
+        if (j < 0 || j >= pages.length) return;
+        const tp = pages[i]; pages[i] = pages[j]; pages[j] = tp;
+        const tn = names[i]; names[i] = names[j]; names[j] = tn;
+        if (STATE.currentPage === i) STATE.currentPage = j;
+        else if (STATE.currentPage === j) STATE.currentPage = i;
+        persistLayout();
+        render();
+      }
+      // Encode a page's number + optional name into the single "Page" field
+      // that travels through the sheet. parseInt() still reads the leading
+      // number, so old code and old rows round-trip unchanged; the name (if
+      // any) rides along after a "|" so it follows the user across devices.
+      function encodePageField(num, name) {
+        return hasPageName(name) ? (num + '|' + String(name).trim()) : String(num);
+      }
       function findFolderById(fid) {
         for (const page of STATE.layout.pages)
           for (const it of page) if (it && it.type === 'folder' && it.id === fid) return it;
@@ -1178,6 +1311,7 @@
             const overflow = p.slice(PAGE_SIZE);
             p = p.slice(0, PAGE_SIZE);
             pages.splice(i + 1, 0, overflow); // re-shaped on the next loop pass
+            pageNamesArr().splice(i + 1, 0, ''); // the spilled page is a fresh, unnamed one
           }
           while (p.length < PAGE_SIZE) p.push(null);
           pages[i] = p;
@@ -1191,7 +1325,7 @@
           const s = firstEmptySlot(page);
           if (s !== -1) { page[s] = cell; return; }
         }
-        const p = newPage(); p[0] = cell; STATE.layout.pages.push(p);
+        const p = newPage(); p[0] = cell; STATE.layout.pages.push(p); pageNamesArr().push('');
       }
       function addAppToLayout(id) { placeInFirstEmpty({ type: 'app', id }); }
       // Which page a given bookmark ended up on (so the view can jump to it).
@@ -1224,18 +1358,26 @@
             }
           }
         }
-        // Drop empty pages. While arranging, keep one trailing empty page —
-        // the "new page" a user just added so they can drop apps onto it.
+        // Drop empty pages — but keep a page the user has named (so a freshly
+        // named, not-yet-filled page sticks around), and, while arranging, keep
+        // one trailing empty page as the "new page" to drop apps onto. The
+        // names array is filtered by the very same mask so it stays in lockstep.
         const pages = STATE.layout.pages;
-        const keepTrailingEmpty = STATE.editMode && pages.length > 0 && isPageEmpty(pages[pages.length - 1]);
-        STATE.layout.pages = pages.filter((p, i) =>
-          !isPageEmpty(p) || (keepTrailingEmpty && i === pages.length - 1));
-        if (!STATE.layout.pages.length) STATE.layout.pages.push(newPage());
+        const names = pageNamesArr();
+        const lastI = pages.length - 1;
+        const keepTrailingEmpty = STATE.editMode && pages.length > 0 && isPageEmpty(pages[lastI]);
+        const keep = pages.map((p, i) =>
+          !isPageEmpty(p) || hasPageName(names[i]) || (keepTrailingEmpty && i === lastI));
+        STATE.layout.pages = pages.filter((_, i) => keep[i]);
+        STATE.layout.pageNames = names.filter((_, i) => keep[i]);
+        if (!STATE.layout.pages.length) { STATE.layout.pages.push(newPage()); STATE.layout.pageNames.push(''); }
         // While arranging, guarantee a trailing empty "new page" at the end so
         // an app can always be dragged (or swiped/arrowed) onto a fresh page —
         // just like an iPhone home screen in jiggle mode.
-        if (STATE.editMode && !isPageEmpty(STATE.layout.pages[STATE.layout.pages.length - 1]))
-          STATE.layout.pages.push(newPage());
+        if (STATE.editMode && !isPageEmpty(STATE.layout.pages[STATE.layout.pages.length - 1])) {
+          STATE.layout.pages.push(newPage()); STATE.layout.pageNames.push('');
+        }
+        normalizePageNames();
         clampCurrentPage();
         if (STATE.openFolderId && !findFolderById(STATE.openFolderId)) STATE.openFolderId = null;
       }
@@ -1259,6 +1401,7 @@
           else if (it.type === 'folder') it.items.forEach(a => present.add(a.id));
         }
         for (const b of STATE.bookmarks) if (!present.has(b.id)) addAppToLayout(b.id);
+        normalizePageNames();
         clampCurrentPage();
       }
       function moveAppOutOfFolder(fid, id) {
@@ -1276,7 +1419,11 @@
        * the Google Sheet and is rebuilt verbatim on every other device.
        *
        * Encoding (kept human-readable in the sheet):
-       *   • Page     = 1-based page number the cell sits on.
+       *   • Page     = 1-based page number the cell sits on, with the page's
+       *                custom name appended after a "|" when it has one
+       *                ("2|Work"). parseInt() still reads the number, so this
+       *                stays backward compatible with rows that carry a bare
+       *                number — and the name now follows the user across devices.
        *   • Position = the slot index (0..PAGE_SIZE-1) for an app sitting
        *                directly on a page; "F<folderSlot>:<indexInFolder>"
        *                for an app living inside a folder.
@@ -1290,16 +1437,17 @@
         const pages = (STATE.layout && STATE.layout.pages) || [];
         for (let p = 0; p < pages.length; p++) {
           const page = pages[p];
+          const pageField = encodePageField(p + 1, pageNameRaw(p)); // "<n>" or "<n>|<name>"
           for (let s = 0; s < page.length; s++) {
             const it = page[s];
             if (!it) continue;
             if (it.type === 'app') {
               const b = byId[it.id];
-              if (b) { b.folder = ''; b.page = p + 1; b.position = s; placed.add(b.id); }
+              if (b) { b.folder = ''; b.page = pageField; b.position = s; placed.add(b.id); }
             } else if (it.type === 'folder') {
               for (let k = 0; k < it.items.length; k++) {
                 const b = byId[it.items[k].id];
-                if (b) { b.folder = it.name || 'Folder'; b.page = p + 1; b.position = 'F' + s + ':' + k; placed.add(b.id); }
+                if (b) { b.folder = it.name || 'Folder'; b.page = pageField; b.position = 'F' + s + ':' + k; placed.add(b.id); }
               }
             }
           }
@@ -1315,10 +1463,16 @@
       // for syncLayout() to drop into the first open slot.
       function buildLayoutFromBookmarks() {
         const pages = [];
+        const names = [];                       // page name carried in the "Page" field
         const ensurePage = (p) => { while (pages.length <= p) pages.push(newPage()); return pages[p]; };
         const folderAt = Object.create(null); // "page:slot" -> folder cell
         for (const b of STATE.bookmarks) {
-          const p = parseInt(b.page, 10);
+          // "Page" may be a bare number ("2") or number + name ("2|Work").
+          const ps = String(b.page == null ? '' : b.page);
+          const pm = ps.match(/^\s*(\d+)\s*(?:\|([\s\S]*))?$/);
+          const p = pm ? parseInt(pm[1], 10) : parseInt(ps, 10);
+          const pname = pm && pm[2] != null ? pm[2].trim() : '';
+          if (Number.isInteger(p) && p >= 1 && pname && !names[p - 1]) names[p - 1] = pname;
           const pos = String(b.position == null ? '' : b.position).trim();
           if (!Number.isInteger(p) || p < 1 || pos === '') continue;
           const fm = pos.match(/^F(\d+):(\d+)$/);
@@ -1343,7 +1497,8 @@
         }
         // Compact folder item arrays (a missing index leaves a hole).
         for (const key in folderAt) folderAt[key].items = folderAt[key].items.filter(Boolean);
-        STATE.layout = { pages: pages.length ? pages : [newPage()] };
+        const builtPages = pages.length ? pages : [newPage()];
+        STATE.layout = { pages: builtPages, pageNames: builtPages.map((_, i) => names[i] || '') };
         // Place anything still unplaced and tidy folders (<2 items dissolve).
         syncLayout();
       }
@@ -1856,7 +2011,66 @@
       /* ================================================================
        * Acting on a command
        * ================================================================ */
+      // Spoken page navigation — "next page", "go to page 3", "go to Work".
+      // Runs before the open/add parser so a page jump never reads as a
+      // bookmark open. Kept deliberately narrow (see parsePageNav) so ordinary
+      // "open Gmail" still opens the bookmark.
+      const PAGE_NUMWORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20 };
+      function pageNumberFromText(t) {
+        const dm = t.match(/\b(\d{1,3})\b/);
+        if (dm) return parseInt(dm[1], 10);
+        for (const w in PAGE_NUMWORDS) if (new RegExp('\\b' + w + '\\b').test(t)) return PAGE_NUMWORDS[w];
+        return null;
+      }
+      function parsePageNav(raw) {
+        const t = normalize(raw);
+        if (!t) return null;
+        // Relative moves always require the literal "page" word.
+        if (/\b(next|forward)\s+page\b/.test(t) || /\bpage\s+(forward|right|over)\b/.test(t)) return { to: STATE.currentPage + 1, rel: true };
+        if (/\b(previous|prev|last|back|backward)\s+page\b/.test(t) || /\bgo\s+back\s+(a\s+)?page\b/.test(t) || /\bpage\s+(back|left|before)\b/.test(t)) return { to: STATE.currentPage - 1, rel: true };
+
+        const hasPageWord = /\bpage\b/.test(t);
+        // "page 3" / "go to page three" — a number alongside the word "page".
+        if (hasPageWord) {
+          const num = pageNumberFromText(t);
+          if (num != null) return { to: num - 1 };
+        }
+        // By name. Allowed when the word "page" is present, or with a strong
+        // navigation verb ("go to"/"switch to"/…) — but NOT bare "open"/"show",
+        // which stay reserved for opening bookmarks.
+        const strongVerb = /\b(go to|goto|switch to|switch over to|jump to|take me to|navigate to)\b/.test(t);
+        if (hasPageWord || strongVerb) {
+          const q = t.replace(/\b(go to|goto|switch to|switch over to|jump to|take me to|navigate to|open|show|the)\b/g, ' ')
+                     .replace(/\bpage\b/g, ' ').replace(/\s+/g, ' ').trim();
+          if (q) {
+            const pages = STATE.layout.pages;
+            for (let i = 0; i < pages.length; i++) {
+              if (q === normalize(pageDisplayName(i))) return { to: i }; // matches a custom name or "page N"
+            }
+          }
+        }
+        return null;
+      }
+      function applyPageNav(nav) {
+        const n = STATE.layout.pages.length;
+        const to = nav.to;
+        if (to < 0 || to >= n) {
+          showToast(nav.rel ? (to < 0 ? 'Already on the first page' : 'Already on the last page') : 'No such page', 'panel-left');
+          return;
+        }
+        if (STATE.view !== 'home') STATE.view = 'home';
+        STATE.homeSearch = '';
+        STATE.currentPage = to;
+        render();
+        const label = pageDisplayName(to);
+        showToast(label, 'panel-left');
+        announce('Showing ' + label);
+      }
+
       function handleCommand(raw) {
+        const pageNav = parsePageNav(raw);
+        if (pageNav) { applyPageNav(pageNav); return; }
+
         const cmd = parseCommand(raw);
 
         if (cmd.kind === 'stop') { stopListening(); return; }
@@ -2813,14 +3027,68 @@
         if (!STATE.bookmarks.length) return `<div class="home">${renderOnboard()}</div>`;
 
         const q = STATE.homeSearch.trim();
+        // Searching shows a flat result list; otherwise the springboard sits
+        // beside the "Pages" rail in a two-column layout (a drawer on mobile).
+        const body = q
+          ? renderSearchResults(q)
+          : `<div class="sb-layout ${STATE.pageNavOpen ? 'nav-open' : ''}">
+               <div class="page-nav-backdrop" data-action="toggle-page-nav" aria-hidden="true"></div>
+               ${renderPageNav()}
+               ${renderSpringboard()}
+             </div>`;
         return `
           <div class="home home-springboard">
             ${VOICE.pendingOpen ? renderPending() : ''}
             ${VOICE.pendingGroup ? renderPendingGroup() : ''}
             ${VOICE.pendingSplit ? renderPendingSplit() : ''}
             ${renderHomeTools()}
-            ${q ? renderSearchResults(q) : renderSpringboard()}
+            ${body}
           </div>`;
+      }
+
+      // The "Pages" rail down the left of the Bookmarks screen. Each page shows
+      // its name (or "Page N") and item count; tapping one jumps there. While
+      // arranging (the pencil/jiggle mode) every row turns into a rename field
+      // with ↑/↓ nudgers to move the page earlier (toward the first/default
+      // page) or later — that's how the order is changed.
+      function renderPageNav() {
+        const pages = STATE.layout.pages.length ? STATE.layout.pages : [newPage()];
+        const edit = STATE.editMode;
+        const rows = pages.map((page, i) => {
+          const name = pageDisplayName(i);
+          const count = page.filter(Boolean).length;
+          const active = i === STATE.currentPage;
+          if (edit) {
+            return `
+              <li class="page-nav-item ${active ? 'active' : ''}" data-pagenav="${i}">
+                <input type="text" id="page-name-${i}" data-page-name data-page="${i}" value="${escAttr(pageNameRaw(i))}" placeholder="Page ${i + 1}" autocomplete="off" spellcheck="false" aria-label="Name for page ${i + 1}">
+                <div class="page-nav-reorder">
+                  <button class="page-nav-move" data-action="move-page-up" data-page="${i}" ${i === 0 ? 'disabled' : ''} title="Move earlier (toward the first page)" aria-label="Move page ${i + 1} earlier"><i data-lucide="chevron-up"></i></button>
+                  <button class="page-nav-move" data-action="move-page-down" data-page="${i}" ${i >= pages.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move page ${i + 1} later"><i data-lucide="chevron-down"></i></button>
+                </div>
+              </li>`;
+          }
+          return `
+            <li data-pagenav="${i}">
+              <button class="page-nav-link ${active ? 'active' : ''}" data-action="goto-page" data-page="${i}" title="Go to ${escAttr(name)}">
+                <span class="page-nav-name">${escHtml(name)}</span>
+                <span class="page-nav-count">${count}</span>
+              </button>
+            </li>`;
+        }).join('');
+        return `
+          <aside class="page-nav" id="page-nav" aria-label="Pages">
+            <div class="page-nav-head">
+              <span class="page-nav-title">Pages</span>
+              <button class="page-nav-addbtn" data-action="add-page" title="Add a page" aria-label="Add a page"><i data-lucide="plus"></i></button>
+            </div>
+            <ul class="page-nav-list">${rows}</ul>
+            <div class="page-nav-foot">
+              <button class="page-nav-edit ${edit ? 'on' : ''}" data-action="toggle-edit">
+                <i data-lucide="${edit ? 'check' : 'pencil'}"></i> ${edit ? 'Done' : 'Edit pages'}
+              </button>
+            </div>
+          </aside>`;
       }
 
       // First-run welcome: explains the product in a line, gives a clear primary
@@ -2904,6 +3172,7 @@
         const showSearch = STATE.bookmarks.length >= 5;
         return `
           <div class="home-actions">
+            ${q ? '' : `<button class="home-pages-btn ${STATE.pageNavOpen ? 'on' : ''}" data-action="toggle-page-nav" title="${STATE.pageNavOpen ? 'Hide pages' : 'Show pages'}" aria-label="${STATE.pageNavOpen ? 'Hide pages' : 'Show pages'}"><i data-lucide="panel-left"></i></button>`}
             <button class="home-listen ${listenCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (Ctrl+Alt+B)' : 'Click to start listening (Ctrl+Alt+B)'}">
               <span class="dot"></span><i data-lucide="mic"></i> ${escHtml(listenLabel)}
             </button>
@@ -3459,10 +3728,19 @@
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
-            case 'goto-page': gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0); break;
+            case 'goto-page': {
+              gotoPage(parseInt(target.getAttribute('data-page'), 10) || 0);
+              // On a phone the rail is a drawer over the board — close it once a
+              // page is picked so the board is visible.
+              if (STATE.pageNavOpen && window.matchMedia && window.matchMedia('(max-width: 820px)').matches) { STATE.pageNavOpen = false; render(); }
+              break;
+            }
             case 'prev-page': gotoPage(STATE.currentPage - 1); break;
             case 'next-page': gotoPage(STATE.currentPage + 1); break;
             case 'add-page': addBlankPage(); break;
+            case 'toggle-page-nav': STATE.pageNavOpen = !STATE.pageNavOpen; render(); break;
+            case 'move-page-up': movePage(parseInt(target.getAttribute('data-page'), 10) || 0, -1); break;
+            case 'move-page-down': movePage(parseInt(target.getAttribute('data-page'), 10) || 0, +1); break;
             case 'toggle-edit': STATE.editMode = !STATE.editMode; normalizeLayout(); persistLayout(); render(); break;
             case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = ''; render(); break;
             case 'reset-icon-add': STATE.draftIcon = ''; render(); break;
@@ -3540,6 +3818,19 @@
           };
         }
 
+        // Live page rename in the "Pages" rail. Like the folder rename, we
+        // persist as you type (no re-render, so the cursor stays put); pressing
+        // Enter/Escape commits and refreshes the rail's labels.
+        document.querySelectorAll('[data-page-name]').forEach(el => {
+          el.oninput = (ev) => {
+            const i = parseInt(el.getAttribute('data-page'), 10);
+            if (Number.isInteger(i)) { pageNamesArr()[i] = ev.target.value; persistLayout(); }
+          };
+          el.onkeydown = (ev) => {
+            if (ev.key === 'Enter' || ev.key === 'Escape') { ev.preventDefault(); el.blur(); render(); }
+          };
+        });
+
         // Pointer-driven "lift and carry" rearranging (assignment, not
         // addEventListener, so handlers don't stack across re-renders). Killing
         // the native dragstart stops the browser ghost-dragging a favicon image.
@@ -3570,6 +3861,9 @@
         const track = document.getElementById('sb-track');
         if (track) track.style.transform = `translateX(-${STATE.currentPage * (100 / n)}%)`;
         document.querySelectorAll('.sb-dot').forEach((d, idx) => d.classList.toggle('active', idx === STATE.currentPage));
+        // Keep the "Pages" rail's highlight in step with swipes/arrows (which
+        // move the track without a full re-render).
+        document.querySelectorAll('.page-nav-link').forEach((el, idx) => el.classList.toggle('active', idx === STATE.currentPage));
         const prev = document.querySelector('.sb-arrow-prev');
         const next = document.querySelector('.sb-arrow-next');
         if (prev) prev.classList.toggle('disabled', STATE.currentPage === 0);
