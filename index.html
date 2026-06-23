@@ -811,6 +811,14 @@
       // ----------------------------------------------------------------
       const CHANGELOG = [
         {
+          version: '2026-06-23c',
+          date: 'Jun 23, 2026',
+          title: 'Listening stops when you leave',
+          items: [
+            'When a bookmark opens and you click over to it — or switch to another tab or app — listening now turns off on its own. Come back to Bookmarks Buddy and tap the mic (or press your shortcut) to start again.'
+          ]
+        },
+        {
           version: '2026-06-23b',
           date: 'Jun 23, 2026',
           title: 'Roomier home screen — at least three rows per page',
@@ -938,7 +946,7 @@
         wantRunning: false,        // we want the recognizer running
         srRunning: false,          // it is currently running
         listenOn: false,           // the user has turned listening on
-        micStream: null,           // held open so background tabs keep listening
+        micStream: null,           // held open so the recognizer stays healthy while in use
         permissionDenied: false,
         interimText: '',           // live partial transcript
         dictating: false,          // Add/Edit-modal dictation mode is active
@@ -2708,7 +2716,7 @@
           VOICE.srRunning = false;
           VOICE.lastSrEventAt = Date.now();
           if (!VOICE.wantRunning || !recognitionWanted()) return;
-          kickRecognition(); // restart so listening keeps going all day
+          kickRecognition(); // restart so listening keeps going for the whole session
         };
         VOICE.recognition = r;
         return r;
@@ -2746,8 +2754,8 @@
 
       // Chrome's cloud recognizer can silently stop delivering results during
       // long sessions; an abort()+restart (under a second) un-sticks it. The
-      // held mic stream keeps this interval alive even in a backgrounded tab,
-      // which is what lets Bookmarks Buddy keep listening all day.
+      // held mic stream keeps this watchdog interval reliable so listening stays
+      // healthy for as long as you're using the app.
       const SR_STALL_MS = 15000;
       function startWatchdog() {
         if (VOICE.watchdogId) return;
@@ -2759,10 +2767,11 @@
       }
       function stopWatchdog() { if (VOICE.watchdogId) { clearInterval(VOICE.watchdogId); VOICE.watchdogId = null; } }
 
-      // Returning to the foreground is a free chance to revive a recognizer
-      // that died while the tab was throttled in the background.
+      // Leaving the tab (a bookmark we opened taking over, or the user switching
+      // away) stops listening; returning to the foreground is a free chance to
+      // revive a recognizer that died while the tab was briefly throttled.
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) return;
+        if (document.hidden) { stopListeningOnLeave(); return; }
         if (VOICE.wantRunning && recognitionWanted() && !VOICE.srRunning) {
           kickRecognition();
         }
@@ -2817,15 +2826,36 @@
         render();
       }
 
-      function stopListening({ silent = false } = {}) {
+      function stopListening({ silent = false, leftApp = false } = {}) {
         const wasOn = VOICE.listenOn;
         VOICE.listenOn = false;
         if (VOICE.micStream) { try { VOICE.micStream.getTracks().forEach(t => t.stop()); } catch {} VOICE.micStream = null; }
         stopRecognition();
         VOICE.interimText = '';
-        if (!silent && wasOn) { showToast('Stopped listening', 'mic-off'); announce('Stopped listening.'); }
+        if (!silent && wasOn) {
+          if (leftApp) {
+            showToast('Listening stopped — you left Bookmarks Buddy', 'mic-off');
+            announce('Listening stopped because you left Bookmarks Buddy.');
+          } else {
+            showToast('Stopped listening', 'mic-off');
+            announce('Stopped listening.');
+          }
+        }
         render();
       }
+
+      // When you leave Bookmarks Buddy — clicking into a bookmark we just
+      // opened, switching to another tab, or moving to another app — listening
+      // stops on its own. Opening a site hands you off to it, so the mic
+      // shouldn't keep running while your attention is elsewhere. Come back and
+      // tap the mic (or press the shortcut) to start listening again.
+      function stopListeningOnLeave() {
+        // Mid-dictation the Add/Edit form has focus inside the app, so a stray
+        // blur there shouldn't cut the user off — leave that flow alone.
+        if (!VOICE.listenOn || VOICE.dictating) return;
+        stopListening({ leftApp: true });
+      }
+      window.addEventListener('blur', stopListeningOnLeave);
 
       /* ---------------- hands-free dictation (Add modal) ----------------
        * While the "Add a website" modal is open the recognizer flips from
@@ -3824,7 +3854,7 @@
                 </button>
               </div>
               <div class="focus-title">${on ? 'Listening' : 'Ready when you are'}</div>
-              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “add” and a company to save it. It’ll keep listening while you work in other tabs.' : 'Tap the circle and start talking. Leave it on all day.'}</div>
+              <div class="focus-sub">${!sr ? 'Voice needs Chrome or Edge to listen.' : on ? 'Say “open” and a bookmark name to open one site, or a folder name to open the whole group — name several (“open games and searches”) to open them all. Say “split view” and two names, bookmarks or folders, to tile them side by side. Say “add” and a company to save it. When a site opens and you click over to it, listening stops on its own — come back and tap to start again.' : 'Tap the circle and start talking.'}</div>
               ${sr ? `<div class="vp-shortcut" style="margin-top:16px">${shortcutHint()}</div>` : ''}
               <div class="focus-transcript ${interim ? '' : 'muted'}" id="focus-transcript">${interim ? escHtml(interim) + '<span class="caret"></span>' : transcriptResting('focus-transcript')}</div>
               <div class="vp-examples" style="justify-content:center">
