@@ -514,6 +514,17 @@
       .modal { padding: 22px; max-height: calc(100dvh - 40px); overflow-y: auto; }
       .modal-title { font-size: 18px; font-weight: 800; color: var(--navy-deep); }
       .modal-sub { font-size: 13px; color: var(--n500); margin-top: 6px; line-height: 1.5; }
+      .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .modal-mic { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--n300); background: #fff; color: var(--n500); cursor: pointer; display: grid; place-items: center; position: relative; transition: border-color .14s, color .14s, background .14s; }
+      .modal-mic:hover { border-color: var(--primary); color: var(--primary); }
+      .modal-mic.on { border-color: var(--primary); color: var(--primary); background: var(--quote); }
+      .modal-mic svg { width: 20px; height: 20px; }
+      .modal-mic-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--green); opacity: 0; }
+      .modal-mic.on .modal-mic-dot { opacity: 1; animation: statusPulse 1.4s infinite; }
+      .modal-dictate-hint { display: flex; align-items: center; gap: 7px; margin-top: 12px; padding: 9px 12px; border-radius: 10px; background: var(--quote); color: var(--primary); font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+      .modal-dictate-hint svg { width: 15px; height: 15px; flex-shrink: 0; }
+      @keyframes dictateFlash { 0% { box-shadow: 0 0 0 0 rgba(3,114,255,0.30); } 100% { box-shadow: 0 0 0 6px rgba(3,114,255,0); } }
+      .dictating-flash { animation: dictateFlash .4s ease-out; }
       .modal-fields { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
       .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
       .modal-actions .del-text { color: #dc2626; }
@@ -930,6 +941,9 @@
         micStream: null,           // held open so background tabs keep listening
         permissionDenied: false,
         interimText: '',           // live partial transcript
+        dictating: false,          // Add-modal dictation mode is active
+        dictateField: null,        // which Add-modal field voice types into
+        dictatePrevListenOn: false,// was command-listening on before dictation?
         lastSrEventAt: 0,
         watchdogId: null,
         recentActions: [],         // { type, name, url, query, at }
@@ -2766,7 +2780,7 @@
         startListening();
       }
 
-      async function startListening() {
+      async function startListening({ forDictation = false } = {}) {
         if (VOICE.listenOn) return;
         const r = ensureRecognition();
         if (!r) { showToast('Voice needs Chrome or Edge', 'mic-off'); return; }
@@ -2792,8 +2806,13 @@
         VOICE.listenOn = true;
         VOICE.permissionDenied = false;
         startRecognition();
-        showToast('Listening — say “open” or “add” and a name', 'mic');
-        announce('Listening for commands.');
+        if (forDictation) {
+          showToast('Dictation on — speak to fill the form', 'mic');
+          announce('Dictation on. Speak to fill the form, and click a field to switch.');
+        } else {
+          showToast('Listening — say “open” or “add” and a name', 'mic');
+          announce('Listening for commands.');
+        }
         render();
       }
 
@@ -2805,6 +2824,87 @@
         VOICE.interimText = '';
         if (!silent && wasOn) { showToast('Stopped listening', 'mic-off'); announce('Stopped listening.'); }
         render();
+      }
+
+      /* ---------------- hands-free dictation (Add modal) ----------------
+       * While the "Add a website" modal is open the recognizer flips from
+       * command mode into dictation: whatever the user says is typed into the
+       * field they last focused, and clicking another field moves dictation
+       * there — so a bookmark can be added with the mouse and voice alone, no
+       * keyboard needed. */
+      const DICTATE_FIELDS = ['bm-name', 'bm-url', 'bm-notes', 'bm-icon'];
+
+      async function startDictation() {
+        if (!STATE.adding) return;
+        VOICE.dictateField = DICTATE_FIELDS.includes(VOICE.dictateField) ? VOICE.dictateField : 'bm-name';
+        if (!VOICE.srSupported) { focusDictationField(); return; } // no engine — keyboard still works
+        VOICE.dictating = true;
+        if (!VOICE.listenOn) {
+          VOICE.dictatePrevListenOn = false;
+          await startListening({ forDictation: true });
+          if (!VOICE.listenOn) { VOICE.dictating = false; render(); return; } // mic denied/unavailable
+        } else {
+          VOICE.dictatePrevListenOn = true;
+          showToast('Dictation on — speak to fill the form', 'mic');
+        }
+        render();
+        focusDictationField();
+      }
+
+      function stopDictation() {
+        if (!VOICE.dictating) { VOICE.dictateField = null; return; }
+        const resumeCommands = VOICE.dictatePrevListenOn;
+        VOICE.dictating = false;
+        VOICE.dictateField = null;
+        VOICE.dictatePrevListenOn = false;
+        // Listening was off before dictation -> turn the mic back off. The user
+        // was already listening for commands -> leave it running.
+        if (!resumeCommands && VOICE.listenOn) stopListening({ silent: true });
+      }
+
+      function setDictationField(id) {
+        if (DICTATE_FIELDS.includes(id)) VOICE.dictateField = id;
+      }
+
+      function focusDictationField() {
+        const el = document.getElementById(VOICE.dictateField || 'bm-name');
+        if (el) { try { el.focus(); const n = (el.value || '').length; el.selectionStart = el.selectionEnd = n; } catch {} }
+      }
+
+      // Turn a spoken web address into something usable: "github dot com slash
+      // x" -> "github.com/x". Used only for the URL + thumbnail fields.
+      function normalizeSpokenUrl(text) {
+        let t = ' ' + String(text).toLowerCase().trim() + ' ';
+        t = t.replace(/\s+/g, ' ')
+             .replace(/ (dot|point) /g, '.')
+             .replace(/ (slash|forward slash) /g, '/')
+             .replace(/ (dash|hyphen) /g, '-')
+             .replace(/ underscore /g, '_')
+             .replace(/ colon /g, ':');
+        return t.replace(/\s+/g, '');
+      }
+
+      // Append a finalized spoken chunk to the active Add-modal field, reusing
+      // the field's own input handler so STATE and the live preview stay in sync.
+      function dictateIntoField(text) {
+        const id = VOICE.dictateField || 'bm-name';
+        const el = document.getElementById(id);
+        if (!el) return;
+        const isUrl = (id === 'bm-url' || id === 'bm-icon');
+        const chunk = isUrl ? normalizeSpokenUrl(text) : String(text).trim();
+        if (!chunk) return;
+        const cur = el.value || '';
+        const joiner = (!cur || isUrl || /\s$/.test(cur)) ? '' : ' ';
+        el.value = cur + joiner + chunk;
+        try { const n = el.value.length; el.selectionStart = el.selectionEnd = n; } catch {}
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        flashDictation(el);
+      }
+
+      function flashDictation(el) {
+        el.classList.add('dictating-flash');
+        clearTimeout(el._dictTimer);
+        el._dictTimer = setTimeout(() => el.classList.remove('dictating-flash'), 400);
       }
 
       /* ---------------- transcript plumbing ---------------- */
@@ -2822,6 +2922,8 @@
       function handleVoiceTranscript(raw) {
         const text = String(raw).trim();
         if (!text || !VOICE.listenOn) return;
+        // Add modal open -> dictate into the focused field instead of running a command.
+        if (VOICE.dictating && STATE.adding) { dictateIntoField(text); return; }
         if (isDuplicateUtterance(text)) return;
         handleCommand(text);
       }
@@ -2881,6 +2983,7 @@
         placeNewAppOnCurrentPage(id); // drop it on the page being viewed, not an earlier one
         persistBookmarks();
         STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = '';
+        stopDictation();
         STATE.adding = false;
         STATE.currentPage = pageIndexOfApp(id); // show where it landed (the current page)
         showToast('Added “' + name + '”', 'check');
@@ -3490,8 +3593,14 @@
           <div class="sb-overlay">
             <div class="sb-overlay-bg" data-action="close-add"></div>
             <div class="modal">
-              <div class="modal-title">Add a website</div>
-              <div class="modal-sub">The name is what you’ll say out loud to open it by voice.</div>
+              <div class="modal-head">
+                <div>
+                  <div class="modal-title">Add a website</div>
+                  <div class="modal-sub">The name is what you’ll say out loud to open it by voice.</div>
+                </div>
+                ${VOICE.srSupported ? `<button class="modal-mic ${VOICE.dictating ? 'on' : ''}" data-action="toggle-dictation" title="${VOICE.dictating ? 'Voice dictation on — click to turn off' : 'Turn on voice dictation'}" aria-label="${VOICE.dictating ? 'Turn off voice dictation' : 'Turn on voice dictation'}"><span class="modal-mic-dot"></span><i data-lucide="mic"></i></button>` : ''}
+              </div>
+              ${VOICE.dictating ? `<div class="modal-dictate-hint"><i data-lucide="mic"></i> Listening — speak to fill the field you’re in, and click any field to switch.</div>` : ''}
               <div class="modal-fields">
                 <input type="text" id="bm-name" placeholder="Name (e.g. Salesforce)" value="${escAttr(STATE.draftName)}" autocomplete="off">
                 <input type="text" id="bm-url" placeholder="Web address (salesforce.com)" value="${escAttr(STATE.draftUrl)}" autocomplete="off">
@@ -3799,6 +3908,7 @@
             case 'go-home': STATE.view = 'home'; render(); break;
             case 'go-focus': STATE.view = 'focus'; markChangelogSeen(); render(); break;
             case 'toggle-listen': toggleListening(); break;
+            case 'toggle-dictation': if (VOICE.dictating) { stopDictation(); render(); } else { startDictation(); } break;
             case 'add-bookmark': addBookmark(); break;
             case 'save-bookmarks': saveBookmarks(); break;
             case 'open-bookmark': { const bm = STATE.bookmarks.find(b => b.id === id); if (bm) openBookmark(bm, { viaVoice: false }); break; }
@@ -3833,12 +3943,12 @@
             case 'move-page-up': movePage(parseInt(target.getAttribute('data-page'), 10) || 0, -1); break;
             case 'move-page-down': movePage(parseInt(target.getAttribute('data-page'), 10) || 0, +1); break;
             case 'toggle-edit': STATE.editMode = !STATE.editMode; normalizeLayout(); persistLayout(); render(); break;
-            case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = ''; render(); break;
+            case 'add-app': STATE.adding = true; STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = ''; VOICE.dictateField = 'bm-name'; render(); startDictation(); break;
             case 'reset-icon-add': STATE.draftIcon = ''; render(); break;
             case 'reset-icon-edit': STATE.editDraftIcon = ''; render(); break;
             case 'add-starter': addStarter(parseInt(target.getAttribute('data-starter'), 10)); break;
             case 'clear-search': STATE.homeSearch = ''; render(); break;
-            case 'close-add': STATE.adding = false; render(); break;
+            case 'close-add': stopDictation(); STATE.adding = false; render(); break;
             case 'open-folder': STATE.openFolderId = fid; render(); break;
             case 'close-folder': STATE.openFolderId = null; persistLayout(); render(); break;
             case 'remove-from-folder': moveAppOutOfFolder(fid, id); normalizeLayout(); persistLayout(); render(); break;
@@ -3870,6 +3980,12 @@
           urlEl.oninput = (e) => { STATE.draftUrl = e.target.value; };
           urlEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addBookmark(); } };
         }
+        // Hands-free dictation: focusing a field (e.g. clicking it) makes it the
+        // dictation target, so the user can move between fields with the mouse.
+        DICTATE_FIELDS.forEach(fid => {
+          const el = document.getElementById(fid);
+          if (el) el.onfocus = () => { if (VOICE.dictating) setDictationField(fid); };
+        });
 
         // Inline-edit drafts (name + url)
         document.querySelectorAll('[data-edit]').forEach(el => {
