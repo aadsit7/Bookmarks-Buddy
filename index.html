@@ -1328,6 +1328,21 @@
         const p = newPage(); p[0] = cell; STATE.layout.pages.push(p); pageNamesArr().push('');
       }
       function addAppToLayout(id) { placeInFirstEmpty({ type: 'app', id }); }
+      // Place a freshly added app on the page the user is currently viewing, so
+      // "Add" drops it where they're looking instead of back-filling an earlier
+      // page. If that page is full, spill forward to the next page with room (or
+      // a brand-new page) — never backward onto a previous page. Call this
+      // BEFORE persistBookmarks()/syncLayout() so the auto-placer leaves it put.
+      function placeNewAppOnCurrentPage(id) {
+        const cell = { type: 'app', id };
+        const pages = STATE.layout.pages;
+        const start = pages.length ? Math.min(Math.max(0, STATE.currentPage), pages.length - 1) : 0;
+        for (let i = start; i < pages.length; i++) {
+          const s = firstEmptySlot(pages[i]);
+          if (s !== -1) { pages[i][s] = cell; return; }
+        }
+        const p = newPage(); p[0] = cell; pages.push(p); pageNamesArr().push('');
+      }
       // Which page a given bookmark ended up on (so the view can jump to it).
       function pageIndexOfApp(id) {
         for (let i = 0; i < STATE.layout.pages.length; i++)
@@ -2841,10 +2856,11 @@
         if (!name) name = hostCore(url).replace(/^\w/, c => c.toUpperCase());
         const id = uid();
         STATE.bookmarks.push({ id, name, url, notes: STATE.draftNotes.trim(), icon: STATE.draftIcon.trim() });
+        placeNewAppOnCurrentPage(id); // drop it on the page being viewed, not an earlier one
         persistBookmarks();
         STATE.draftName = ''; STATE.draftUrl = ''; STATE.draftNotes = ''; STATE.draftIcon = '';
         STATE.adding = false;
-        STATE.currentPage = pageIndexOfApp(id); // show where it landed
+        STATE.currentPage = pageIndexOfApp(id); // show where it landed (the current page)
         showToast('Added “' + name + '”', 'check');
         render();
       }
@@ -2860,6 +2876,7 @@
         }
         const id = uid();
         STATE.bookmarks.push({ id, name: s.name, url: s.url });
+        placeNewAppOnCurrentPage(id); // drop it on the page being viewed, not an earlier one
         persistBookmarks();
         STATE.currentPage = pageIndexOfApp(id);
         showToast('Added “' + s.name + '”', 'check');
