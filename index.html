@@ -941,8 +941,9 @@
         micStream: null,           // held open so background tabs keep listening
         permissionDenied: false,
         interimText: '',           // live partial transcript
-        dictating: false,          // Add-modal dictation mode is active
-        dictateField: null,        // which Add-modal field voice types into
+        dictating: false,          // Add/Edit-modal dictation mode is active
+        dictateField: null,        // which modal field voice types into
+        dictateFresh: false,       // next spoken chunk replaces the field, then appends
         dictatePrevListenOn: false,// was command-listening on before dictation?
         lastSrEventAt: 0,
         watchdogId: null,
@@ -2832,11 +2833,16 @@
        * field they last focused, and clicking another field moves dictation
        * there — so a bookmark can be added with the mouse and voice alone, no
        * keyboard needed. */
-      const DICTATE_FIELDS = ['bm-name', 'bm-url', 'bm-notes', 'bm-icon'];
+      // Dictation works in both the Add and Edit modals; only one is open at a
+      // time, so this is the union of their field IDs (used to bind focus).
+      const DICTATE_FIELDS = ['bm-name', 'bm-url', 'bm-notes', 'bm-icon', 'edit-name', 'edit-url', 'edit-notes', 'edit-icon'];
+      function dictationActive() { return STATE.adding || !!STATE.editingId; }
+      function dictationFirstField() { return STATE.adding ? 'bm-name' : (STATE.editingId ? 'edit-name' : null); }
 
       async function startDictation() {
-        if (!STATE.adding) return;
-        VOICE.dictateField = DICTATE_FIELDS.includes(VOICE.dictateField) ? VOICE.dictateField : 'bm-name';
+        if (!dictationActive()) return;
+        VOICE.dictateField = dictationFirstField();
+        VOICE.dictateFresh = true;
         if (!VOICE.srSupported) { focusDictationField(); return; } // no engine — keyboard still works
         VOICE.dictating = true;
         if (!VOICE.listenOn) {
@@ -2856,6 +2862,7 @@
         const resumeCommands = VOICE.dictatePrevListenOn;
         VOICE.dictating = false;
         VOICE.dictateField = null;
+        VOICE.dictateFresh = false;
         VOICE.dictatePrevListenOn = false;
         // Listening was off before dictation -> turn the mic back off. The user
         // was already listening for commands -> leave it running.
@@ -2863,11 +2870,14 @@
       }
 
       function setDictationField(id) {
-        if (DICTATE_FIELDS.includes(id)) VOICE.dictateField = id;
+        // A fresh focus -> the next spoken chunk replaces the field (handy when
+        // editing a pre-filled bookmark); keep talking to append after that.
+        if (DICTATE_FIELDS.includes(id)) { VOICE.dictateField = id; VOICE.dictateFresh = true; }
       }
 
       function focusDictationField() {
-        const el = document.getElementById(VOICE.dictateField || 'bm-name');
+        const id = VOICE.dictateField || dictationFirstField();
+        const el = id && document.getElementById(id);
         if (el) { try { el.focus(); const n = (el.value || '').length; el.selectionStart = el.selectionEnd = n; } catch {} }
       }
 
@@ -2884,18 +2894,24 @@
         return t.replace(/\s+/g, '');
       }
 
-      // Append a finalized spoken chunk to the active Add-modal field, reusing
-      // the field's own input handler so STATE and the live preview stay in sync.
+      // Append a finalized spoken chunk to the active modal field (Add or Edit),
+      // reusing the field's own input handler so STATE and the live preview stay
+      // in sync.
       function dictateIntoField(text) {
-        const id = VOICE.dictateField || 'bm-name';
-        const el = document.getElementById(id);
+        const id = VOICE.dictateField || dictationFirstField();
+        const el = id && document.getElementById(id);
         if (!el) return;
-        const isUrl = (id === 'bm-url' || id === 'bm-icon');
+        const isUrl = id.endsWith('-url') || id.endsWith('-icon');
         const chunk = isUrl ? normalizeSpokenUrl(text) : String(text).trim();
         if (!chunk) return;
-        const cur = el.value || '';
-        const joiner = (!cur || isUrl || /\s$/.test(cur)) ? '' : ' ';
-        el.value = cur + joiner + chunk;
+        if (VOICE.dictateFresh) {
+          el.value = chunk;                 // first words after focusing replace the field
+          VOICE.dictateFresh = false;
+        } else {
+          const cur = el.value || '';
+          const joiner = (!cur || isUrl || /\s$/.test(cur)) ? '' : ' ';
+          el.value = cur + joiner + chunk;  // keep talking to append
+        }
         try { const n = el.value.length; el.selectionStart = el.selectionEnd = n; } catch {}
         el.dispatchEvent(new Event('input', { bubbles: true }));
         flashDictation(el);
@@ -2922,8 +2938,8 @@
       function handleVoiceTranscript(raw) {
         const text = String(raw).trim();
         if (!text || !VOICE.listenOn) return;
-        // Add modal open -> dictate into the focused field instead of running a command.
-        if (VOICE.dictating && STATE.adding) { dictateIntoField(text); return; }
+        // Add or Edit modal open -> dictate into the focused field instead of running a command.
+        if (VOICE.dictating && dictationActive()) { dictateIntoField(text); return; }
         if (isDuplicateUtterance(text)) return;
         handleCommand(text);
       }
@@ -3041,12 +3057,13 @@
         bm.url = url;
         bm.notes = STATE.editDraftNotes.trim();
         bm.icon = STATE.editDraftIcon.trim();
+        stopDictation();
         STATE.editingId = null;
         persistBookmarks();
         showToast('Updated', 'check');
         render();
       }
-      function cancelEdit() { STATE.editingId = null; render(); }
+      function cancelEdit() { stopDictation(); STATE.editingId = null; render(); }
 
       function deleteBookmark(id) {
         STATE.bookmarks = STATE.bookmarks.filter(b => b.id !== id);
@@ -3628,7 +3645,11 @@
           <div class="sb-overlay">
             <div class="sb-overlay-bg" data-action="cancel-edit"></div>
             <div class="modal">
-              <div class="modal-title">Edit website</div>
+              <div class="modal-head">
+                <div class="modal-title">Edit website</div>
+                ${VOICE.srSupported ? `<button class="modal-mic ${VOICE.dictating ? 'on' : ''}" data-action="toggle-dictation" title="${VOICE.dictating ? 'Voice dictation on — click to turn off' : 'Turn on voice dictation'}" aria-label="${VOICE.dictating ? 'Turn off voice dictation' : 'Turn on voice dictation'}"><span class="modal-mic-dot"></span><i data-lucide="mic"></i></button>` : ''}
+              </div>
+              ${VOICE.dictating ? `<div class="modal-dictate-hint"><i data-lucide="mic"></i> Listening — speak to fill the field you’re in, and click any field to switch.</div>` : ''}
               <div class="modal-fields">
                 <input type="text" id="edit-name" data-edit="name" placeholder="Name" value="${escAttr(STATE.editDraftName)}" autocomplete="off">
                 <input type="text" id="edit-url" data-edit="url" placeholder="Web address" value="${escAttr(STATE.editDraftUrl)}" autocomplete="off">
@@ -3912,10 +3933,10 @@
             case 'add-bookmark': addBookmark(); break;
             case 'save-bookmarks': saveBookmarks(); break;
             case 'open-bookmark': { const bm = STATE.bookmarks.find(b => b.id === id); if (bm) openBookmark(bm, { viaVoice: false }); break; }
-            case 'edit-bookmark': startEdit(id); break;
+            case 'edit-bookmark': startEdit(id); startDictation(); break;
             case 'save-edit': saveEdit(id); break;
             case 'cancel-edit': cancelEdit(); break;
-            case 'confirm-delete': STATE.confirmDeleteId = id; STATE.editingId = null; STATE.adding = false; render(); break;
+            case 'confirm-delete': stopDictation(); STATE.confirmDeleteId = id; STATE.editingId = null; STATE.adding = false; render(); break;
             case 'cancel-delete': STATE.confirmDeleteId = null; render(); break;
             case 'delete-bookmark': deleteBookmark(id); break;
             case 'open-pending': openPending(); break;
