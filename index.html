@@ -295,9 +295,16 @@
       .sb-track { display: flex; height: 100%; transition: transform .32s var(--ease); will-change: transform; }
       .sb-page {
         flex: 0 0 auto;
-        display: grid; grid-template-columns: repeat(auto-fill, 120px); justify-content: space-evenly;
+        /* Always lay a page out as four columns — a 4×3 iPhone-style grid — so a
+           full page stacks into at least three rows instead of spreading into
+           one or two very wide rows on large screens. minmax(0,…) lets the
+           columns shrink to fit narrow widths rather than overflow; centering
+           with a viewport-scaled gap keeps the tiles grouped like a real home
+           screen rather than flung to the edges on a wide monitor. */
+        display: grid; grid-template-columns: repeat(4, minmax(0, 120px));
+        justify-content: center; column-gap: clamp(20px, 5vw, 64px);
         grid-auto-rows: min-content;
-        gap: 30px 0; align-content: start; padding: 18px 20px 22px;
+        row-gap: 30px; align-content: start; padding: 18px 20px 22px;
       }
       .sb-empty-page { grid-column: 1 / -1; text-align: center; color: var(--n500); font-size: 13.5px; line-height: 1.6; padding: 48px 12px; }
 
@@ -654,7 +661,7 @@
         .focus-transcript { font-size: 20px; }
         .home-springboard { padding: 14px 12px 26px; }
         .springboard { border-radius: 24px; min-height: 74vh; }
-        .sb-page { grid-template-columns: repeat(auto-fill, 98px); gap: 22px 0; padding: 12px 8px 16px; }
+        .sb-page { grid-template-columns: repeat(auto-fill, 98px); justify-content: space-evenly; gap: 22px 0; padding: 12px 8px 16px; }
         .sb-label { max-width: 94px; } /* keep wrapped titles inside the narrower mobile columns */
         .sb-arrow { display: none; } /* swipe is the natural gesture on touch */
         .sb-dock-hint { display: none; }
@@ -789,6 +796,14 @@
       // is cached on the device so the NEW badge clears once it's been read.
       // ----------------------------------------------------------------
       const CHANGELOG = [
+        {
+          version: '2026-06-23b',
+          date: 'Jun 23, 2026',
+          title: 'Roomier home screen — at least three rows per page',
+          items: [
+            'Each home-screen page now lays out as a 4×3 grid, so your sites stack into at least three rows instead of stretching across one or two wide rows on a large screen.'
+          ]
+        },
         {
           version: '2026-06-23',
           date: 'Jun 23, 2026',
