@@ -181,7 +181,7 @@
       .vp-chip { font-size: 12px; font-weight: 600; color: var(--n600); background: var(--n50); border: 1px solid var(--n200); border-radius: 999px; padding: 6px 13px; }
       .vp-chip b { color: var(--primary); font-weight: 700; }
 
-      /* Keyboard-shortcut hint (Ctrl+Alt+B launches listening) */
+      /* Keyboard-shortcut hint (the configured combo, default Ctrl+R, launches listening) */
       .vp-shortcut { margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--n500); line-height: 1.95; }
       kbd { display: inline-block; font-family: inherit; font-size: 11px; font-weight: 700; line-height: 1; color: var(--navy-deep); background: #fff; border: 1px solid var(--n300); border-bottom-width: 2px; border-radius: 6px; padding: 3px 6px; vertical-align: baseline; }
 
@@ -195,6 +195,15 @@
       .switch.on { background: var(--primary); }
       .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left 0.2s; box-shadow: 0 1px 3px rgba(22,31,91,0.2); }
       .switch.on::after { left: 22px; }
+
+      /* Editable keyboard-shortcut control in Settings */
+      .sc-edit { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+      .sc-rec { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 6px 11px; border-radius: 10px; border: 1.5px solid var(--n300); background: #fff; color: var(--navy-deep); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color .14s, background .14s, color .14s; }
+      .sc-rec:hover { border-color: var(--primary); }
+      .sc-rec.recording { border-style: dashed; border-color: var(--primary); color: var(--primary); background: var(--quote); }
+      .sc-rec .sc-esc { font-size: 10.5px; font-weight: 600; opacity: .7; margin-left: 4px; }
+      .sc-reset { border: none; background: transparent; color: var(--n500); font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 6px 2px; }
+      .sc-reset:hover { color: var(--primary); text-decoration: underline; }
 
       /* Recent actions */
       .recent { margin-top: 22px; }
@@ -888,7 +897,8 @@
         editDraftNotes: '',        // edit-form description note
         editDraftIcon: '',         // edit-form custom thumbnail
         // speak: optional spoken confirmation, off by default.
-        settings: { speak: false },
+        // shortcut: key combo that toggles listening from anywhere (default Ctrl+R).
+        settings: { speak: false, shortcut: defaultShortcut() },
         // iPhone-style home-screen layout. pages[] holds "cells", each either
         // { type:'app', id } or { type:'folder', id, name, items:[{type:'app',id}] }.
         // The flat STATE.bookmarks list stays the source of truth (voice uses
@@ -903,7 +913,8 @@
         editMode: false,           // "jiggle" mode for rearranging
         openFolderId: null,        // folder whose overlay is open, if any
         adding: false,             // add-website modal open
-        homeSearch: ''             // live filter on the Bookmarks screen
+        homeSearch: '',            // live filter on the Bookmarks screen
+        recordingShortcut: false   // Settings is capturing a new shortcut combo
       };
 
       // Transient drag state for rearranging in edit mode.
@@ -943,6 +954,8 @@
         try {
           const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || '{}');
           if (s && typeof s === 'object') STATE.settings = Object.assign(STATE.settings, s);
+          const sc = STATE.settings.shortcut;
+          if (!sc || typeof sc !== 'object' || (!sc.code && !sc.key)) STATE.settings.shortcut = defaultShortcut();
         } catch {}
       }
       function persistBookmarks() {
@@ -2966,10 +2979,53 @@
         return `<span class="vp-chip">${escHtml('“Split view ' + two[0] + ' and ' + two[1] + '”')}</span>`;
       }
 
-      // The global launch shortcut, rendered as <kbd> keys. Kept in one place
-      // so the voice panel and focus screen always show the same combo.
+      // The launch shortcut is user-configurable (Settings) and stored as
+      // { ctrl, alt, shift, meta, code, key }. These helpers keep its display
+      // and matching in one place so every screen shows the same combo.
+      function defaultShortcut() {
+        return { ctrl: true, alt: false, shift: false, meta: false, code: 'KeyR', key: 'r' };
+      }
+      function isDefaultShortcut() {
+        const sc = (STATE.settings && STATE.settings.shortcut) || {}, d = defaultShortcut();
+        return (!!sc.ctrl === d.ctrl) && (!!sc.alt === d.alt) && (!!sc.shift === d.shift) &&
+               (!!sc.meta === d.meta) && ((sc.code || '') === d.code || (sc.key || '').toLowerCase() === d.key);
+      }
+      // A readable name for the shortcut's main (non-modifier) key.
+      function shortcutKeyName(sc) {
+        sc = sc || {};
+        const code = sc.code || '';
+        let m;
+        if ((m = /^Key([A-Z])$/.exec(code))) return m[1];
+        if ((m = /^Digit(\d)$/.exec(code))) return m[1];
+        if (/^F\d{1,2}$/.test(code)) return code;
+        const named = {
+          Space: 'Space', Enter: 'Enter', Escape: 'Esc', Backspace: 'Backspace', Tab: 'Tab', Delete: 'Del',
+          ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+          Minus: '-', Equal: '=', Slash: '/', Backslash: '\\', Period: '.', Comma: ',',
+          Semicolon: ';', Quote: '\'', BracketLeft: '[', BracketRight: ']', Backquote: '`'
+        };
+        if (named[code]) return named[code];
+        const k = sc.key || '';
+        if (k === ' ') return 'Space';
+        if (k.length === 1) return k.toUpperCase();
+        return k || '?';
+      }
+      // The shortcut as ordered parts, e.g. ['Ctrl','R'] or ['Ctrl','Shift','/'].
+      function shortcutParts() {
+        const sc = (STATE.settings && STATE.settings.shortcut) || {};
+        const parts = [];
+        if (sc.ctrl) parts.push('Ctrl');
+        if (sc.alt) parts.push('Alt');
+        if (sc.shift) parts.push('Shift');
+        if (sc.meta) parts.push('Cmd');
+        parts.push(shortcutKeyName(sc));
+        return parts;
+      }
+      // Plain text ("Ctrl+R") for titles/aria; keycap HTML for on-screen hints.
+      function shortcutLabel() { return shortcutParts().join('+'); }
+      function shortcutKbdHtml() { return shortcutParts().map(p => '<kbd>' + escHtml(p) + '</kbd>').join(' + '); }
       function shortcutHint() {
-        return 'Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> to start or stop listening';
+        return 'Press ' + shortcutKbdHtml() + ' to start or stop listening';
       }
 
       function captureFocus() {
@@ -3157,7 +3213,7 @@
         const hints = voiceBarHints();
         return `
           <div class="voicebar">
-            <button class="vb-orb ${on ? 'on' : ''}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} aria-label="${on ? 'Stop listening' : 'Start listening'}" title="${on ? 'Listening — tap to stop (Ctrl+Alt+B)' : 'Tap to talk (Ctrl+Alt+B)'}">
+            <button class="vb-orb ${on ? 'on' : ''}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} aria-label="${on ? 'Stop listening' : 'Start listening'}" title="${on ? 'Listening — tap to stop (' + shortcutLabel() + ')' : 'Tap to talk (' + shortcutLabel() + ')'}">
               <i data-lucide="mic"></i>
             </button>
             <div class="vb-body">
@@ -3194,7 +3250,7 @@
         return `
           <div class="home-actions">
             ${q ? '' : `<button class="home-pages-btn ${STATE.pageNavOpen ? 'on' : ''}" data-action="toggle-page-nav" title="${STATE.pageNavOpen ? 'Hide pages' : 'Show pages'}" aria-label="${STATE.pageNavOpen ? 'Hide pages' : 'Show pages'}"><i data-lucide="panel-left"></i></button>`}
-            <button class="home-listen ${listenCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (Ctrl+Alt+B)' : 'Click to start listening (Ctrl+Alt+B)'}">
+            <button class="home-listen ${listenCls}" data-action="${sr ? 'toggle-listen' : 'noop'}" ${sr ? '' : 'disabled'} title="${on ? 'Click to stop listening (' + shortcutLabel() + ')' : 'Click to start listening (' + shortcutLabel() + ')'}">
               <span class="dot"></span><i data-lucide="mic"></i> ${escHtml(listenLabel)}
             </button>
             <button class="sb-edit-btn home-edit ${edit ? 'on' : ''}" data-action="toggle-edit" title="${edit ? 'Done' : 'Rearrange apps'}" aria-label="${edit ? 'Done arranging' : 'Rearrange apps'}">
@@ -3655,6 +3711,18 @@
                   </div>
                   <span class="switch ${STATE.settings.speak ? 'on' : ''}" role="switch" tabindex="0" aria-checked="${STATE.settings.speak}" data-action="toggle-speak" aria-label="Speak confirmations"></span>
                 </div>
+                ${sr ? `<div class="opt-row">
+                  <div class="opt-text">
+                    <div class="opt-title">Keyboard shortcut</div>
+                    <div class="opt-sub">Press this anywhere to start or stop listening. Click to change.</div>
+                  </div>
+                  <div class="sc-edit">
+                    <button class="sc-rec ${STATE.recordingShortcut ? 'recording' : ''}" data-action="record-shortcut" aria-label="Change keyboard shortcut" title="Click, then press your key combo">
+                      ${STATE.recordingShortcut ? 'Press keys…<span class="sc-esc">Esc to cancel</span>' : shortcutKbdHtml()}
+                    </button>
+                    ${!STATE.recordingShortcut && !isDefaultShortcut() ? `<button class="sc-reset" data-action="reset-shortcut" title="Reset to Ctrl+R">Reset</button>` : ''}
+                  </div>
+                </div>` : ''}
               </div>
               ${renderWhatsNew()}
               <div class="focus-recent">${renderRecent(true)}</div>
@@ -3747,6 +3815,8 @@
             case 'open-pending-split': openPendingSplit(); break;
             case 'dismiss-pending-split': VOICE.pendingSplit = null; render(); break;
             case 'toggle-speak': STATE.settings.speak = !STATE.settings.speak; persistSettings(); render(); break;
+            case 'record-shortcut': STATE.recordingShortcut = !STATE.recordingShortcut; render(); break;
+            case 'reset-shortcut': STATE.settings.shortcut = defaultShortcut(); STATE.recordingShortcut = false; persistSettings(); render(); break;
             case 'clear-recent': VOICE.recentActions = []; render(); break;
             // ----- springboard -----
             case 'goto-page': {
@@ -4270,20 +4340,24 @@
       window.addEventListener('beforeunload', () => { persistBookmarks(); persistSettings(); });
 
       /* ================================================================
-       * Global shortcut — Ctrl + Alt + B toggles voice listening
+       * Global shortcut — toggles voice listening (default Ctrl + R)
        * Starts OR stops hands-free listening from anywhere (any screen, even
        * with focus in a text field) without reaching for the mouse, so the
-       * user can flip listening on and off between screens with one combo. A
-       * keydown is a user gesture, so the microphone prompt is allowed exactly
-       * as it is from the on-screen button. Registered once so it survives
-       * re-renders.
+       * user can flip listening on and off between screens with one combo. The
+       * combo is user-configurable in Settings. A keydown is a user gesture, so
+       * the microphone prompt is allowed exactly as it is from the on-screen
+       * button. Registered once so it survives re-renders.
        * ================================================================ */
       function matchesListenShortcut(e) {
-        // Match the physical "B" key so non-QWERTY layouts still work, with a
-        // key-value fallback. Require Ctrl+Alt; reject Meta so we never swallow
-        // an OS/browser combo (e.g. ⌘ shortcuts on macOS).
-        const isB = e.code === 'KeyB' || (typeof e.key === 'string' && e.key.toLowerCase() === 'b');
-        return isB && e.ctrlKey && e.altKey && !e.metaKey;
+        const sc = STATE.settings && STATE.settings.shortcut;
+        if (!sc) return false;
+        // Match the physical key by code so non-QWERTY layouts still work, with
+        // a key-value fallback. Every modifier must match exactly so e.g. Ctrl+R
+        // doesn't also fire on Ctrl+Shift+R.
+        const keyOk = (sc.code && e.code === sc.code) ||
+                      (sc.key && typeof e.key === 'string' && e.key.toLowerCase() === sc.key.toLowerCase());
+        return !!keyOk && e.ctrlKey === !!sc.ctrl && e.altKey === !!sc.alt &&
+               e.shiftKey === !!sc.shift && e.metaKey === !!sc.meta;
       }
       window.addEventListener('keydown', (e) => {
         if (!matchesListenShortcut(e)) return;
@@ -4294,6 +4368,42 @@
         // so the user can switch it between screens without the mouse.
         if (VOICE.listenOn) stopListening();
         else startListening();
+      });
+
+      // Settings shortcut recorder — capture the next combo the user presses and
+      // store it as the launch shortcut. Runs in the capture phase so it preempts
+      // the listen/arrow shortcuts and the browser's own default for the chosen
+      // combo (e.g. Ctrl+R reload) while recording.
+      window.addEventListener('keydown', (e) => {
+        if (!STATE.recordingShortcut) return;
+        // Wait for a "real" key — ignore a lone modifier press.
+        if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift' || e.key === 'Meta') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.key === 'Escape') { STATE.recordingShortcut = false; render(); return; }
+        if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+          showToast('Hold Ctrl, Alt, or Shift with a key', 'keyboard');
+          return; // keep recording until a valid combo is pressed
+        }
+        STATE.settings.shortcut = {
+          ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey,
+          code: e.code || '', key: (typeof e.key === 'string' ? e.key.toLowerCase() : '')
+        };
+        STATE.recordingShortcut = false;
+        persistSettings();
+        showToast('Shortcut set to ' + shortcutLabel(), 'keyboard');
+        render();
+      }, true);
+      // Clicking anywhere but the recorder (or leaving the window) cancels
+      // recording, so a stray click can't capture the user's next keystroke.
+      window.addEventListener('click', (e) => {
+        if (!STATE.recordingShortcut) return;
+        if (e.target.closest && e.target.closest('[data-action="record-shortcut"]')) return;
+        STATE.recordingShortcut = false;
+        requestAnimationFrame(render);
+      }, true);
+      window.addEventListener('blur', () => {
+        if (STATE.recordingShortcut) { STATE.recordingShortcut = false; render(); }
       });
 
       // Arrow keys page through the springboard (when on the Bookmarks screen
